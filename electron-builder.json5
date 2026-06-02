@@ -3,7 +3,9 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.siddharthvaddem.openstream",
   "asar": true,
-  "asarUnpack": [],
+  "asarUnpack": [
+    "node_modules/ffmpeg-static/**"
+  ],
   "productName": "OpenStream",
   "npmRebuild": true,
   "buildDependenciesFromSource": true,

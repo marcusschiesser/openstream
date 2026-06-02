@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { DesktopCapturerSource } from "electron";
 import {
@@ -59,9 +60,16 @@ function serializeDesktopSource(source: DesktopCapturerSource): SelectedSource {
 function resolveFfmpegPath(): string | null {
 	try {
 		const ffmpegStaticPath = nodeRequire("ffmpeg-static");
-		return typeof ffmpegStaticPath === "string" && ffmpegStaticPath.length > 0
-			? ffmpegStaticPath
-			: null;
+		if (typeof ffmpegStaticPath !== "string" || ffmpegStaticPath.length === 0) {
+			return null;
+		}
+
+		const unpackedPath = ffmpegStaticPath.replace("app.asar", "app.asar.unpacked");
+		if (unpackedPath !== ffmpegStaticPath && existsSync(unpackedPath)) {
+			return unpackedPath;
+		}
+
+		return ffmpegStaticPath;
 	} catch (error) {
 		console.error("Failed to resolve bundled FFmpeg path:", error);
 		return null;
@@ -413,7 +421,12 @@ export function registerIpcHandlers(
 			destinationUrl,
 		];
 
-		const proc = spawn(ffmpegPath, args, { stdio: ["pipe", "pipe", "pipe"] });
+		let proc: ChildProcessWithoutNullStreams;
+		try {
+			proc = spawn(ffmpegPath, args, { stdio: ["pipe", "pipe", "pipe"] });
+		} catch (error) {
+			return { success: false, error: `Failed to start bundled FFmpeg: ${String(error)}` };
+		}
 		liveStreamProcess = proc;
 
 		proc.stderr.on("data", (chunk) => {
