@@ -7,52 +7,36 @@ on:
     branches: [main]
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
-
   test:
-    name: Test
+    name: Test, Lint, Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test
-      - run: npm run test:browser:install
-      - run: npm run test:browser
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.22.1
           cache: npm
-      - run: npm ci
-      - run: npx vite build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check translations
+        run: npm run i18n:check
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Install browser test runtime
+        run: npm run test:browser:install
+
+      - name: Run browser tests
+        run: npm run test:browser
+
+      - name: Build Vite and Electron
+        run: npm run build-vite
