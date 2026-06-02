@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "Kontrol panelini gizle",
+		"closeApp": "Uygulamayı kapat",
+		"useVerticalTray": "Dikey araç çubuğunu kullan",
+		"useHorizontalTray": "Yatay araç çubuğunu kullan"
+	},
+	"audio": {
+		"enableSystemAudio": "Sistem sesini etkinleştir",
+		"disableSystemAudio": "Sistem sesini devre dışı bırak",
+		"enableMicrophone": "Mikrofonu etkinleştir",
+		"disableMicrophone": "Mikrofonu devre dışı bırak",
+		"defaultMicrophone": "Varsayılan Mikrofon"
+	},
+	"webcam": {
+		"enableWebcam": "Kamerayı etkinleştir",
+		"disableWebcam": "Kamerayı devre dışı bırak",
+		"defaultCamera": "Varsayılan Kamera",
+		"searching": "Aranıyor...",
+		"noneFound": "Kamera bulunamadı",
+		"unavailable": "Kamera kullanılamıyor"
+	},
+	"sourceSelector": {
+		"loading": "Kaynaklar yükleniyor...",
+		"screens": "Ekranlar ({{count}})",
+		"windows": "Pencereler ({{count}})",
+		"defaultSourceName": "Ekran",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "Dil",
+	"systemLanguagePrompt": {
+		"title": "Sistem dilinizi kullanmak ister misiniz?",
+		"description": "Sistem diliniz {{language}} olarak algılandı. OpenStream i {{language}} diline geçirmek ister misiniz?",
+		"switch": "{{language}} diline geç",
+		"keepDefault": "Mevcut dili koru"
+	}
+}

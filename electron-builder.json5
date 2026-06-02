@@ -1,0 +1,67 @@
+// @see - https://www.electron.build/configuration/configuration
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.siddharthvaddem.openstream",
+  "asar": true,
+  "asarUnpack": [],
+  "productName": "OpenStream",
+  "npmRebuild": true,
+  "buildDependenciesFromSource": true,
+  "compression": "normal",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "dist-electron",
+    "!*.png",
+    "!preview*.png",
+    "!*.md",
+    "!README.md",
+    "!CONTRIBUTING.md",
+    "!LICENSE"
+  ],
+  "extraResources": [],
+
+  "mac": {
+    "notarize": false,
+    "hardenedRuntime": true,
+    "entitlements": "macos.entitlements",
+    "entitlementsInherit": "macos.entitlements",
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "icon": "icons/icons/mac/icon.icns",
+    "artifactName": "${productName}-Mac-${arch}-${version}-Installer.${ext}",
+    "extendInfo": {
+      "NSAudioCaptureUsageDescription": "OpenStream needs audio capture permission to record system audio.",
+      "NSMicrophoneUsageDescription": "OpenStream needs microphone access to record voice audio.",
+      "NSCameraUsageDescription": "OpenStream needs camera access to record webcam video.",
+      "NSScreenCaptureUsageDescription": "OpenStream needs screen recording permission to detect and capture windows.",
+      "NSCameraUseContinuityCameraDeviceType": true
+    }
+  },
+  "linux": {
+    "target": [
+      "AppImage",
+      "deb",
+      "pacman"
+    ],
+    "icon": "icons/icons/png",
+    "artifactName": "${productName}-Linux-${version}.${ext}",
+    "category": "AudioVideo"
+  },
+  "win": {
+    "target": [
+      "nsis"
+    ],
+    "icon": "icons/icons/win/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "隱藏控制面板",
+		"closeApp": "關閉應用程式",
+		"useVerticalTray": "使用直向托盤",
+		"useHorizontalTray": "使用橫向托盤"
+	},
+	"audio": {
+		"enableSystemAudio": "啟用系統音訊",
+		"disableSystemAudio": "停用系統音訊",
+		"enableMicrophone": "啟用麥克風",
+		"disableMicrophone": "停用麥克風",
+		"defaultMicrophone": "預設麥克風"
+	},
+	"webcam": {
+		"enableWebcam": "啟用攝影機",
+		"disableWebcam": "停用攝影機",
+		"defaultCamera": "預設攝影機",
+		"searching": "正在搜尋...",
+		"noneFound": "未找到攝影機",
+		"unavailable": "攝影機不可用"
+	},
+	"sourceSelector": {
+		"loading": "正在載入來源...",
+		"screens": "螢幕 ({{count}})",
+		"windows": "視窗 ({{count}})",
+		"defaultSourceName": "螢幕",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "語言",
+	"systemLanguagePrompt": {
+		"title": "要使用系統語言嗎？",
+		"description": "偵測到系統語言為 {{language}}。要將 OpenStream 切換為 {{language}} 嗎？",
+		"switch": "切換為 {{language}}",
+		"keepDefault": "保持目前語言"
+	}
+}

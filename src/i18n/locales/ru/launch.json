@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "Скрыть HUD",
+		"closeApp": "Закрыть приложение",
+		"useVerticalTray": "Использовать вертикальную панель",
+		"useHorizontalTray": "Использовать горизонтальную панель"
+	},
+	"audio": {
+		"enableSystemAudio": "Включить системное аудио",
+		"disableSystemAudio": "Отключить системное аудио",
+		"enableMicrophone": "Включить микрофон",
+		"disableMicrophone": "Отключить микрофон",
+		"defaultMicrophone": "Микрофон по умолчанию"
+	},
+	"webcam": {
+		"enableWebcam": "Включить веб-камеру",
+		"disableWebcam": "Отключить веб-камеру",
+		"defaultCamera": "Камера по умолчанию",
+		"searching": "Поиск...",
+		"noneFound": "Камера не найдена",
+		"unavailable": "Камера недоступна"
+	},
+	"sourceSelector": {
+		"loading": "Загрузка источников...",
+		"screens": "Экраны ({{count}})",
+		"windows": "Окна ({{count}})",
+		"defaultSourceName": "Экран",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "Язык",
+	"systemLanguagePrompt": {
+		"title": "Использовать системный язык?",
+		"description": "Мы обнаружили {{language}} как системный язык. Хотите переключить OpenStream на {{language}}?",
+		"switch": "Переключить на {{language}}",
+		"keepDefault": "Оставить текущий язык"
+	}
+}

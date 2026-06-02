@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "Ocultar HUD",
+		"closeApp": "Cerrar aplicación",
+		"useVerticalTray": "Usar bandeja vertical",
+		"useHorizontalTray": "Usar bandeja horizontal"
+	},
+	"audio": {
+		"enableSystemAudio": "Activar audio del sistema",
+		"disableSystemAudio": "Desactivar audio del sistema",
+		"enableMicrophone": "Activar micrófono",
+		"disableMicrophone": "Desactivar micrófono",
+		"defaultMicrophone": "Micrófono predeterminado"
+	},
+	"webcam": {
+		"enableWebcam": "Activar cámara web",
+		"disableWebcam": "Desactivar cámara web",
+		"defaultCamera": "Cámara predeterminada",
+		"searching": "Buscando...",
+		"noneFound": "No se encontró cámara",
+		"unavailable": "Cámara no disponible"
+	},
+	"sourceSelector": {
+		"loading": "Cargando fuentes...",
+		"screens": "Pantallas ({{count}})",
+		"windows": "Ventanas ({{count}})",
+		"defaultSourceName": "Pantalla",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "Idioma",
+	"systemLanguagePrompt": {
+		"title": "¿Usar el idioma del sistema?",
+		"description": "Detectamos {{language}} como idioma de tu sistema. ¿Quieres cambiar OpenStream a {{language}}?",
+		"switch": "Cambiar a {{language}}",
+		"keepDefault": "Mantener idioma actual"
+	}
+}

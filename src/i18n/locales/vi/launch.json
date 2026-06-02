@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "Ẩn HUD",
+		"closeApp": "Đóng ứng dụng",
+		"useVerticalTray": "Dùng khay dọc",
+		"useHorizontalTray": "Dùng khay ngang"
+	},
+	"audio": {
+		"enableSystemAudio": "Bật âm thanh hệ thống",
+		"disableSystemAudio": "Tắt âm thanh hệ thống",
+		"enableMicrophone": "Bật micro",
+		"disableMicrophone": "Tắt micro",
+		"defaultMicrophone": "Micro Mặc định"
+	},
+	"webcam": {
+		"enableWebcam": "Bật webcam",
+		"disableWebcam": "Tắt webcam",
+		"defaultCamera": "Máy ảnh Mặc định",
+		"searching": "Đang tìm kiếm...",
+		"noneFound": "Không tìm thấy máy ảnh",
+		"unavailable": "Máy ảnh không khả dụng"
+	},
+	"sourceSelector": {
+		"loading": "Đang tải nguồn...",
+		"screens": "Màn hình ({{count}})",
+		"windows": "Cửa sổ ({{count}})",
+		"defaultSourceName": "Màn hình",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "Ngôn ngữ",
+	"systemLanguagePrompt": {
+		"title": "Sử dụng ngôn ngữ hệ thống của bạn?",
+		"description": "Chúng tôi phát hiện {{language}} là ngôn ngữ hệ thống của bạn. Bạn có muốn chuyển OpenStream sang {{language}} không?",
+		"switch": "Chuyển sang {{language}}",
+		"keepDefault": "Giữ ngôn ngữ hiện tại"
+	}
+}

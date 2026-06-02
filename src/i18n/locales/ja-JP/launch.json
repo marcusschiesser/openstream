@@ -1,0 +1,39 @@
+{
+	"tooltips": {
+		"hideHUD": "HUDを隠す",
+		"closeApp": "アプリを閉じる",
+		"useVerticalTray": "縦型トレイを使用",
+		"useHorizontalTray": "横型トレイを使用"
+	},
+	"audio": {
+		"enableSystemAudio": "システム音声を有効にする",
+		"disableSystemAudio": "システム音声を無効にする",
+		"enableMicrophone": "マイクを有効にする",
+		"disableMicrophone": "マイクを無効にする",
+		"defaultMicrophone": "デフォルトのマイク"
+	},
+	"webcam": {
+		"enableWebcam": "ウェブカメラを有効にする",
+		"disableWebcam": "ウェブカメラを無効にする",
+		"defaultCamera": "デフォルトのカメラ",
+		"searching": "検索中...",
+		"noneFound": "カメラが見つかりません",
+		"unavailable": "カメラが利用できません"
+	},
+	"sourceSelector": {
+		"loading": "ソースを読み込み中...",
+		"screens": "画面 ({{count}})",
+		"windows": "ウィンドウ ({{count}})",
+		"defaultSourceName": "画面",
+		"emptyTitle": "No screens or windows found",
+		"emptyDescription": "If you just granted screen recording permission, reload this picker. On macOS you may need to reopen OpenStream.",
+		"loadFailedDescription": "OpenStream could not load capture sources. Reload this picker and try again."
+	},
+	"language": "言語",
+	"systemLanguagePrompt": {
+		"title": "システム言語を使用しますか？",
+		"description": "システム言語として{{language}}が検出されました。OpenStreamを{{language}}に切り替えますか？",
+		"switch": "{{language}}に切り替え",
+		"keepDefault": "現在の言語を保持"
+	}
+}
