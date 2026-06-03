@@ -2,6 +2,8 @@
 
 OpenStream is a lightweight desktop livestreaming app for sending a selected screen or window to an RTMP/RTMPS destination.
 
+<video src="public/demo.mp4" controls width="100%"></video>
+
 ## Features
 
 - Pick a screen or window as the live source.
