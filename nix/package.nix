@@ -33,7 +33,7 @@ buildNpmPackage {
       );
     };
 
-  npmDepsHash = "sha256-tOpoJPzaZDK3HJijGHpZ0+jWsbrYyQUuw1pO0Uxcifg=";
+  npmDepsHash = "sha256-ivLnkDCmOyv+ZtKcfZkHxCycVMkEnU5+S7vW3q7KIV4=";
 
   env.ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
 
