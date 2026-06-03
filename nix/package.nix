@@ -11,7 +11,7 @@
 buildNpmPackage {
   nodejs = nodejs_22;
   pname = "openstream";
-  version = "1.4.0";
+  version = "1.0.0";
 
   src =
     let
