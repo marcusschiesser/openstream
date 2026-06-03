@@ -1,6 +1,6 @@
 # OpenStream
 
-OpenStream is a lightweight desktop livestreaming app for sending a selected screen or window to an RTMP/RTMPS destination.
+OpenStream is a lightweight desktop livestreaming app for sending a selected screen or window to an RTMP/RTMPS destination like Youtube Live.
 
 <img src="public/demo.gif" alt="OpenStream demo" width="100%">
 
@@ -20,20 +20,13 @@ npm install
 npm run dev
 ```
 
-## Build
+## Installation
 
-```sh
-npm run build-vite
-npm run build
-```
+Download the latest installer for your platform from the [GitHub Releases page](https://github.com/marcusschiesser/openstream/releases).
 
-Platform-specific packaged builds:
+## Contributing
 
-```sh
-npm run build:mac
-npm run build:win
-npm run build:linux
-```
+Contributions are welcome - please include screenshots or a short video for any UI change or new user-facing feature. If it touches what users see or do, show it. Skip only when it genuinely doesn't apply. PRs that don't follow this will be closed.
 
 ## Permissions
 
