@@ -1,0 +1,349 @@
+name: Release Electron App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to publish (for example: 1.1.0 or v1.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Bump version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${INPUT_VERSION#v}"
+          TAG="v${VERSION}"
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must be stable semver, for example 1.1.0 or v1.1.0"
+            exit 1
+          fi
+
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag ${TAG} already exists"
+            exit 1
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release ${TAG} already exists"
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump npm package version
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Compute npmDepsHash
+        id: hash
+        run: |
+          set -euo pipefail
+          HASH=$(nix run nixpkgs#prefetch-npm-deps -- package-lock.json)
+          if [[ -z "$HASH" ]]; then
+            echo "::error::prefetch-npm-deps returned an empty hash"
+            exit 1
+          fi
+          echo "hash=${HASH}" >> "$GITHUB_OUTPUT"
+          echo "Computed npmDepsHash: ${HASH}"
+
+      - name: Update Nix package
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          HASH: ${{ steps.hash.outputs.hash }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^([[:space:]]*version[[:space:]]*=[[:space:]]*)\"[^\"]*\";|\1\"${VERSION}\";|" nix/package.nix
+          sed -i -E "s|^([[:space:]]*npmDepsHash[[:space:]]*=[[:space:]]*)\"[^\"]*\";|\1\"${HASH}\";|" nix/package.nix
+          git --no-pager diff -- package.json package-lock.json nix/package.nix
+
+      - name: Commit and push release bump
+        id: commit
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git add package.json package-lock.json nix/package.nix
+          if git diff --cached --quiet; then
+            echo "::error::Release version ${VERSION} did not change package.json, package-lock.json, or nix/package.nix"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: release v${VERSION}"
+          git push origin HEAD:main
+
+          SHA=$(git rev-parse HEAD)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Release commit: ${SHA}"
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: prepare
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows app
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release/**/OpenStream Setup *.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install pacman build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
+      - name: Build Linux app
+        run: npm run build:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: |
+            release/**/*.AppImage
+            release/**/*.zsync
+            release/**/*.deb
+            release/**/*.pacman
+          if-no-files-found: error
+          retention-days: 30
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    runs-on: macos-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.1
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite + Electron
+        run: npx tsc && npx vite build
+
+      - name: Package .app bundle
+        run: npx electron-builder --mac --${{ matrix.arch }} --dir
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find .app bundle
+        id: find_app
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "=== Release directory contents ==="
+          ls -laR "release/${VERSION}/" || echo "release/${VERSION}/ not found"
+          echo "=== Searching for .app bundle ==="
+          APP_BUNDLE=$(find "release/${VERSION}" -maxdepth 4 -name "*.app" -type d | head -n1)
+          if [[ -z "$APP_BUNDLE" ]]; then
+            echo "::error::No .app bundle found in release/${VERSION}/"
+            exit 1
+          fi
+          echo "app_bundle=${APP_BUNDLE}" >> "$GITHUB_OUTPUT"
+          echo "Found: ${APP_BUNDLE}"
+
+      - name: Create DMG
+        id: dmg
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          APP_BUNDLE: ${{ steps.find_app.outputs.app_bundle }}
+        run: |
+          set -euo pipefail
+          DMG_NAME="Openscreen-Mac-${ARCH}-${VERSION}.dmg"
+          RELEASE_DIR="release/${VERSION}"
+          DMG_OUTPUT="${RELEASE_DIR}/${DMG_NAME}"
+          STAGING="${RELEASE_DIR}/dmg-staging"
+
+          mkdir -p "$STAGING"
+          cp -R "$APP_BUNDLE" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+
+          hdiutil create \
+            -srcfolder "$STAGING" \
+            -volname "Openscreen" \
+            -fs HFS+ \
+            -fsargs "-c c=64,a=16,e=16" \
+            -format UDBZ \
+            "$DMG_OUTPUT"
+
+          rm -rf "$STAGING"
+
+          echo "dmg_path=${DMG_OUTPUT}" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload unsigned DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: openscreen-mac-${{ matrix.arch }}
+          path: ${{ steps.dmg.outputs.dmg_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build-windows
+      - build-linux
+      - build-macos
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Collect release assets
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p upload-assets
+
+          WINDOWS_ASSET=$(find release-assets -type f -name "*.exe" | head -n1)
+          LINUX_APPIMAGE=$(find release-assets -type f -name "*.AppImage" | head -n1)
+          LINUX_DEB=$(find release-assets -type f -name "*.deb" | head -n1)
+          LINUX_PACMAN=$(find release-assets -type f -name "*.pacman" | head -n1)
+          MAC_ARM=$(find release-assets -type f -name "*.dmg" | grep -i "arm64" | head -n1 || true)
+          MAC_X64=$(find release-assets -type f -name "*.dmg" | grep -i "x64" | head -n1 || true)
+
+          for required in WINDOWS_ASSET LINUX_APPIMAGE LINUX_DEB LINUX_PACMAN MAC_ARM MAC_X64; do
+            if [[ -z "${!required}" ]]; then
+              echo "::error::Missing required release asset: ${required}"
+              find release-assets -maxdepth 6 -type f -print
+              exit 1
+            fi
+          done
+
+          cp "$WINDOWS_ASSET" "upload-assets/OpenStream.Setup.${VERSION}.exe"
+          cp "$LINUX_APPIMAGE" "upload-assets/OpenStream-Linux-${VERSION}.AppImage"
+          cp "$LINUX_DEB" "upload-assets/OpenStream-Linux-${VERSION}.deb"
+          cp "$LINUX_PACMAN" "upload-assets/OpenStream-Linux-${VERSION}.pacman"
+          cp "$MAC_ARM" "upload-assets/Openscreen-Mac-arm64-${VERSION}.dmg"
+          cp "$MAC_X64" "upload-assets/Openscreen-Mac-x64-${VERSION}.dmg"
+
+          while IFS= read -r zsync_asset; do
+            cp "$zsync_asset" "upload-assets/$(basename "$zsync_asset")"
+          done < <(find release-assets -type f -name "*.zsync")
+
+          ls -lh upload-assets
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TARGET: ${{ needs.prepare.outputs.sha }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Release ${TAG}.
+
+          Note: macOS DMGs are currently unsigned and not notarized.
+          EOF
+
+          gh release create "$TAG" upload-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET" \
+            --title "$TAG" \
+            --notes-file release-notes.md
