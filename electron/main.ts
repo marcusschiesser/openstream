@@ -13,7 +13,7 @@ import {
 import { registerOpenAppShortcut, unregisterAllGlobalShortcuts } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
 import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
-import { createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
+import { createHudOverlayWindow } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,7 +39,6 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 	: RENDERER_DIST;
 
 let mainWindow: BrowserWindow | null = null;
-let sourceSelectorWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const trayIconSize = process.platform === "darwin" ? 16 : 24;
 const defaultTrayIcon = getTrayIcon("openstream.png", trayIconSize);
@@ -144,14 +143,6 @@ function updateTrayMenu() {
 	);
 }
 
-function createSourceSelectorWindowWrapper() {
-	sourceSelectorWindow = createSourceSelectorWindow();
-	sourceSelectorWindow.on("closed", () => {
-		sourceSelectorWindow = null;
-	});
-	return sourceSelectorWindow;
-}
-
 app.on("window-all-closed", () => {
 	app.quit();
 });
@@ -231,11 +222,7 @@ app.whenReady().then(async () => {
 
 	createTray();
 	setupApplicationMenu();
-	registerIpcHandlers(
-		createSourceSelectorWindowWrapper,
-		() => mainWindow,
-		() => sourceSelectorWindow,
-	);
+	registerIpcHandlers(() => mainWindow);
 	registerOpenAppShortcut(showMainWindow);
 	createWindow();
 });

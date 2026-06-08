@@ -5,7 +5,7 @@ import { I18nProvider } from "./contexts/I18nContext";
 import "./index.css";
 
 const windowType = new URLSearchParams(window.location.search).get("windowType") || "";
-if (windowType === "hud-overlay" || windowType === "source-selector") {
+if (windowType === "hud-overlay" || windowType === "webcam-preview") {
 	document.body.style.background = "transparent";
 	document.documentElement.style.background = "transparent";
 	document.getElementById("root")?.style.setProperty("background", "transparent");

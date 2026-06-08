@@ -1,26 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { computeCompositeLayout } from "./compositeLayout";
 import {
-	DEFAULT_LIVE_OUTPUT_PRESET,
-	getLiveOutputPreset,
+	getLiveStreamVideoBitrateKbps,
 	joinRtmpsUrl,
-	LIVE_OUTPUT_PRESETS,
 	validateLiveStreamDestination,
 } from "./liveStream";
 
 describe("live stream helpers", () => {
-	it("defines the supported output presets", () => {
-		expect(LIVE_OUTPUT_PRESETS).toEqual([
-			expect.objectContaining({ id: "16:9-1080p", width: 1920, height: 1080 }),
-			expect.objectContaining({ id: "9:16-1080p", width: 1080, height: 1920 }),
-			expect.objectContaining({ id: "1:1-1080p", width: 1080, height: 1080 }),
-		]);
-	});
-
-	it("falls back to the default output preset for unknown ids", () => {
-		expect(getLiveOutputPreset("missing" as never)).toBe(DEFAULT_LIVE_OUTPUT_PRESET);
-	});
-
 	it("joins the RTMP server URL and stream key", () => {
 		expect(joinRtmpsUrl("rtmps://example.com/live/", "abc123")).toBe(
 			"rtmps://example.com/live/abc123",
@@ -51,11 +37,22 @@ describe("live stream helpers", () => {
 		).toMatchInlineSnapshot(`"Enter a stream key."`);
 	});
 
-	it("keeps picture-in-picture webcam inside every live output preset", () => {
-		for (const preset of LIVE_OUTPUT_PRESETS) {
+	it("selects live bitrate from native source dimensions", () => {
+		expect(getLiveStreamVideoBitrateKbps({ width: 1920, height: 1080 })).toBe(6000);
+		expect(getLiveStreamVideoBitrateKbps({ width: 3840, height: 2160 })).toBe(6000);
+		expect(getLiveStreamVideoBitrateKbps({ width: 1280, height: 720 })).toBe(4500);
+		expect(getLiveStreamVideoBitrateKbps({ width: 1080, height: 1920 })).toBe(4500);
+	});
+
+	it("keeps picture-in-picture webcam inside native source canvases", () => {
+		for (const sourceSize of [
+			{ width: 1920, height: 1080 },
+			{ width: 1080, height: 1920 },
+			{ width: 1680, height: 1050 },
+		]) {
 			const layout = computeCompositeLayout({
-				canvasSize: { width: preset.width, height: preset.height },
-				screenSize: { width: 1920, height: 1080 },
+				canvasSize: sourceSize,
+				screenSize: sourceSize,
 				webcamSize: { width: 1280, height: 720 },
 				layoutPreset: "picture-in-picture",
 				webcamSizePreset: 25,
@@ -66,8 +63,12 @@ describe("live stream helpers", () => {
 			expect(layout?.webcamRect).not.toBeNull();
 			expect(layout!.webcamRect!.x).toBeGreaterThanOrEqual(0);
 			expect(layout!.webcamRect!.y).toBeGreaterThanOrEqual(0);
-			expect(layout!.webcamRect!.x + layout!.webcamRect!.width).toBeLessThanOrEqual(preset.width);
-			expect(layout!.webcamRect!.y + layout!.webcamRect!.height).toBeLessThanOrEqual(preset.height);
+			expect(layout!.webcamRect!.x + layout!.webcamRect!.width).toBeLessThanOrEqual(
+				sourceSize.width,
+			);
+			expect(layout!.webcamRect!.y + layout!.webcamRect!.height).toBeLessThanOrEqual(
+				sourceSize.height,
+			);
 		}
 	});
 });

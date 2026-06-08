@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { computeCompositeLayout, type RenderRect } from "@/lib/compositeLayout";
 import {
+	getLiveStreamVideoBitrateKbps,
 	joinRtmpsUrl,
 	type LiveStreamStartConfig,
 	validateLiveStreamDestination,
@@ -358,23 +359,9 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 			chunkWriteQueue.current = Promise.resolve();
 
 			try {
-				const { outputPreset } = config.layout;
-				const destinationUrl = joinRtmpsUrl(config.serverUrl, config.streamKey);
-				const startResult = await window.electronAPI.startLiveStream({
-					destinationUrl,
-					width: outputPreset.width,
-					height: outputPreset.height,
-					videoBitrateKbps: outputPreset.videoBitrateKbps,
-				});
-
-				if (!startResult.success) {
-					throw new Error(startResult.error ?? "Failed to start live stream encoder.");
-				}
-
 				screenStream = await captureScreenStream();
 				microphoneStream = await captureMicrophoneStream();
-				webcamStream =
-					config.layout.webcamLayoutPreset === "no-webcam" ? null : await captureWebcamStream();
+				webcamStream = await captureWebcamStream();
 
 				const screenVideo = await createVideoElement(screenStream);
 				const webcamVideo = webcamStream ? await createVideoElement(webcamStream) : null;
@@ -394,17 +381,30 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 
 				const screenSettings = screenTrack.getSettings();
 				const screenSize = {
-					width: screenVideo.videoWidth || screenSettings.width || outputPreset.width,
-					height: screenVideo.videoHeight || screenSettings.height || outputPreset.height,
+					width: screenVideo.videoWidth || screenSettings.width || TARGET_WIDTH,
+					height: screenVideo.videoHeight || screenSettings.height || TARGET_HEIGHT,
 				};
+				const videoBitrateKbps = getLiveStreamVideoBitrateKbps(screenSize);
+				const destinationUrl = joinRtmpsUrl(config.serverUrl, config.streamKey);
+				const startResult = await window.electronAPI.startLiveStream({
+					destinationUrl,
+					width: screenSize.width,
+					height: screenSize.height,
+					videoBitrateKbps,
+				});
+
+				if (!startResult.success) {
+					throw new Error(startResult.error ?? "Failed to start live stream encoder.");
+				}
+
 				const webcamSize =
 					webcamVideo && webcamVideo.videoWidth > 0 && webcamVideo.videoHeight > 0
 						? { width: webcamVideo.videoWidth, height: webcamVideo.videoHeight }
 						: null;
 
 				const canvas = document.createElement("canvas");
-				canvas.width = outputPreset.width;
-				canvas.height = outputPreset.height;
+				canvas.width = screenSize.width;
+				canvas.height = screenSize.height;
 				const context = canvas.getContext("2d");
 				if (!context) {
 					throw new Error("Unable to create live stream canvas.");
@@ -422,7 +422,7 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 							canvasSize: { width: canvas.width, height: canvas.height },
 							screenSize,
 							webcamSize,
-							layoutPreset: webcamVideo ? config.layout.webcamLayoutPreset : "no-webcam",
+							layoutPreset: webcamVideo ? "picture-in-picture" : "no-webcam",
 							webcamMaskShape: config.layout.webcamMaskShape,
 							webcamSizePreset: config.layout.webcamSizePreset,
 							webcamPosition: config.layout.webcamPosition,
@@ -479,11 +479,14 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 
 				const recorder = new MediaRecorder(canvasStream, {
 					mimeType: selectLiveMimeType(),
-					videoBitsPerSecond: outputPreset.videoBitrateKbps * 1000,
+					videoBitsPerSecond: videoBitrateKbps * 1000,
 					audioBitsPerSecond: AUDIO_BITRATE,
 				});
 
 				recorder.ondataavailable = (event) => {
+					if (stopping.current) {
+						return;
+					}
 					if (!event.data || event.data.size === 0) {
 						return;
 					}
@@ -491,6 +494,9 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 					chunkWriteQueue.current = chunkWriteQueue.current
 						.then(async () => {
 							const buffer = await chunk.arrayBuffer();
+							if (stopping.current) {
+								return;
+							}
 							const result = await window.electronAPI.writeLiveStreamChunk(buffer);
 							if (!result.success && !stopping.current) {
 								toast.error(result.error ?? "Live stream encoder stopped.");

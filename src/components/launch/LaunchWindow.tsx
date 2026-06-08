@@ -18,6 +18,7 @@ import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useCameraDevices } from "../../hooks/useCameraDevices";
 import { useLiveStreamer } from "../../hooks/useLiveStreamer";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
+import type { WebcamMaskShape } from "../../lib/liveLayoutTypes";
 import {
 	DEFAULT_LIVE_STREAM_LAYOUT,
 	type LiveStreamLayout,
@@ -31,7 +32,6 @@ import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import styles from "./LaunchWindow.module.css";
 import { LiveStreamSetupDialog } from "./LiveStreamSetupDialog";
-import { openSourceSelectorWithPermissionRetry } from "./openSourceSelectorFlow";
 
 const ICON_SIZE = 20;
 
@@ -47,6 +47,18 @@ const windowBtnClasses =
 const hudSidebarClasses = "ml-0.5 pl-1.5 border-l border-white/10 flex items-center gap-0.5";
 const hudSidebarVerticalClasses =
 	"mt-0.5 pt-1.5 border-t border-white/10 flex flex-col items-center gap-0.5";
+const WEBCAM_SHAPE_OPTIONS: Array<{ value: WebcamMaskShape; label: string }> = [
+	{ value: "rectangle", label: "Rectangle" },
+	{ value: "rounded", label: "Rounded" },
+	{ value: "circle", label: "Circle" },
+	{ value: "square", label: "Square" },
+];
+const WEBCAM_SIZE_OPTIONS = [
+	{ value: 15, label: "Small" },
+	{ value: 25, label: "Medium" },
+	{ value: 35, label: "Large" },
+	{ value: 50, label: "XL" },
+];
 
 export function LaunchWindow() {
 	const t = useScopedT("launch");
@@ -203,13 +215,17 @@ export function LaunchWindow() {
 	}, [setHudMouseEventsEnabled]);
 
 	const [selectedSource, setSelectedSource] = useState<ProcessedDesktopSource | null>(null);
-	const [hasSelectedSource, setHasSelectedSource] = useState(false);
+	const [screenSources, setScreenSources] = useState<ProcessedDesktopSource[]>([]);
+	const [screenSourcesLoading, setScreenSourcesLoading] = useState(true);
 	const [liveSetupOpen, setLiveSetupOpen] = useState(false);
 	const [liveSetupPreparing, setLiveSetupPreparing] = useState(false);
 	const [liveStreamLayout, setLiveStreamLayout] = useState<LiveStreamLayout>(
 		DEFAULT_LIVE_STREAM_LAYOUT,
 	);
-	const selectedSourceLabel = selectedSource?.name ?? t("sourceSelector.defaultSourceName");
+	const [previewHiddenForStreaming, setPreviewHiddenForStreaming] = useState(false);
+	const selectedSourceLabel = selectedSource?.name ?? "No screen";
+	const webcamPreviewVisible =
+		webcamEnabled && Boolean(selectedSource) && !streaming && !previewHiddenForStreaming;
 
 	useEffect(() => {
 		window.electronAPI?.setHudOverlayExpanded?.(liveSetupOpen);
@@ -217,25 +233,93 @@ export function LaunchWindow() {
 	}, [isLanguageMenuOpen, liveSetupOpen, setHudMouseEventsEnabled]);
 
 	useEffect(() => {
-		return () => window.electronAPI?.setHudOverlayExpanded?.(false);
+		return () => {
+			window.electronAPI?.setHudOverlayExpanded?.(false);
+			window.electronAPI?.setWebcamPreviewState?.(null);
+		};
 	}, []);
 
 	useEffect(() => {
-		const checkSelectedSource = async () => {
-			const source = await window.electronAPI?.getSelectedSource?.();
-			setSelectedSource(source ?? null);
-			setHasSelectedSource(Boolean(source));
-		};
-		void checkSelectedSource();
-		const interval = window.setInterval(checkSelectedSource, 500);
-		return () => window.clearInterval(interval);
+		if (!streaming) {
+			setPreviewHiddenForStreaming(false);
+		}
+	}, [streaming]);
+
+	useEffect(() => {
+		window.electronAPI?.setWebcamPreviewState?.(
+			webcamPreviewVisible && selectedSource
+				? {
+						enabled: true,
+						source: {
+							id: selectedSource.id,
+							display_id: selectedSource.display_id,
+						},
+						webcamDeviceId,
+						layout: {
+							webcamMaskShape: liveStreamLayout.webcamMaskShape,
+							webcamSizePreset: liveStreamLayout.webcamSizePreset,
+							webcamPosition: liveStreamLayout.webcamPosition,
+						},
+					}
+				: null,
+		);
+	}, [liveStreamLayout, selectedSource, webcamDeviceId, webcamPreviewVisible]);
+
+	useEffect(() => {
+		return window.electronAPI?.onWebcamPreviewStateChanged?.((state) => {
+			const nextPosition = state?.layout.webcamPosition;
+			if (!nextPosition) return;
+			setLiveStreamLayout((current) => {
+				if (
+					current.webcamPosition?.cx === nextPosition.cx &&
+					current.webcamPosition?.cy === nextPosition.cy
+				) {
+					return current;
+				}
+				return { ...current, webcamPosition: nextPosition };
+			});
+		});
 	}, []);
 
-	const openSourceSelector = async () => {
-		await openSourceSelectorWithPermissionRetry({
-			openSourceSelector: () => window.electronAPI.openSourceSelector(),
-			requestScreenAccess: () => window.electronAPI.requestScreenAccess(),
-		});
+	const loadScreenSources = useCallback(async (options: { showLoading?: boolean } = {}) => {
+		const showLoading = options.showLoading ?? true;
+		if (showLoading) {
+			setScreenSourcesLoading(true);
+		}
+		try {
+			const access = await window.electronAPI.requestScreenAccess();
+			if (!access.granted) {
+				setScreenSources([]);
+				setSelectedSource(null);
+				return;
+			}
+
+			const sources = await window.electronAPI.getScreenSources();
+			const selected = await window.electronAPI.getSelectedSource();
+			setScreenSources(sources);
+			setSelectedSource(selected ?? sources[0] ?? null);
+		} catch (error) {
+			console.warn("Unable to load screen sources:", error);
+			setScreenSources([]);
+			setSelectedSource(null);
+		} finally {
+			if (showLoading) {
+				setScreenSourcesLoading(false);
+			}
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadScreenSources({ showLoading: true });
+		const interval = window.setInterval(() => void loadScreenSources({ showLoading: false }), 2500);
+		return () => window.clearInterval(interval);
+	}, [loadScreenSources]);
+
+	const selectScreenSource = async (sourceId: string) => {
+		const source = screenSources.find((candidate) => candidate.id === sourceId);
+		if (!source) return;
+		const selected = await window.electronAPI.selectSource(source);
+		setSelectedSource(selected ?? source);
 	};
 
 	const setWebcamEnabled = async (enabled: boolean) => {
@@ -249,11 +333,22 @@ export function LaunchWindow() {
 		}
 	};
 
+	const updateLiveStreamLayout = (next: Partial<LiveStreamLayout>) => {
+		setLiveStreamLayout((current) => ({ ...current, ...next }));
+	};
+
 	const handleStartLiveStream = async (config: LiveStreamStartConfig) => {
+		setPreviewHiddenForStreaming(true);
+		await new Promise((resolve) => window.setTimeout(resolve, 120));
 		try {
-			return await startLiveStream(config);
+			const started = await startLiveStream(config);
+			if (!started) {
+				setPreviewHiddenForStreaming(false);
+			}
+			return started;
 		} catch (error) {
 			console.warn("Failed to start live stream:", error);
+			setPreviewHiddenForStreaming(false);
 			return false;
 		}
 	};
@@ -263,7 +358,7 @@ export function LaunchWindow() {
 			void stopLiveStream();
 			return;
 		}
-		if (!hasSelectedSource || liveSetupPreparing) return;
+		if (!selectedSource || liveSetupPreparing) return;
 		setLiveSetupPreparing(true);
 		try {
 			const refreshedSource = await window.electronAPI?.captureSelectedSourcePreview?.();
@@ -293,10 +388,9 @@ export function LaunchWindow() {
 	const handleHudDragPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
 		const lastPosition = dragLastPositionRef.current;
 		if (!lastPosition) return;
-		window.electronAPI?.moveHudOverlayBy?.(
-			event.screenX - lastPosition.x,
-			event.screenY - lastPosition.y,
-		);
+		const deltaX = event.screenX - lastPosition.x;
+		const deltaY = event.screenY - lastPosition.y;
+		window.electronAPI?.moveHudOverlayBy?.(deltaX, deltaY);
 		dragLastPositionRef.current = { x: event.screenX, y: event.screenY };
 	};
 	const handleHudDragPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -408,29 +502,25 @@ export function LaunchWindow() {
 							onMouseLeave={() => setIsWebcamHovered(false)}
 							onFocus={() => setIsWebcamFocused(true)}
 							onBlur={() => setIsWebcamFocused(false)}
-							style={{ width: webcamExpanded ? "240px" : "140px" }}
+							style={{ width: webcamExpanded ? "430px" : "140px" }}
 						>
-							<div className="relative flex-1 min-w-0">
-								{!webcamExpanded && (
-									<div className="truncate text-[10px] font-medium text-white/60">
-										{selectedCameraLabel}
-									</div>
-								)}
-								{webcamExpanded &&
-									(isCameraDevicesLoading ? (
-										<span className="text-[10px] italic text-white/40">
-											{t("webcam.searching")}
-										</span>
-									) : cameraDevicesError ? (
-										<span className="text-[10px] italic text-white/40">
-											{t("webcam.unavailable")}
-										</span>
-									) : cameraDevices.length === 0 ? (
-										<span className="text-[10px] italic text-white/40">
-											{t("webcam.noneFound")}
-										</span>
-									) : (
-										<>
+							{!webcamExpanded && (
+								<div className="min-w-0 flex-1 truncate text-[10px] font-medium text-white/60">
+									{selectedCameraLabel}
+								</div>
+							)}
+							{webcamExpanded &&
+								(isCameraDevicesLoading ? (
+									<span className="text-[10px] italic text-white/40">{t("webcam.searching")}</span>
+								) : cameraDevicesError ? (
+									<span className="text-[10px] italic text-white/40">
+										{t("webcam.unavailable")}
+									</span>
+								) : cameraDevices.length === 0 ? (
+									<span className="text-[10px] italic text-white/40">{t("webcam.noneFound")}</span>
+								) : (
+									<>
+										<div className="relative min-w-0 flex-1">
 											<select
 												value={webcamDeviceId || selectedCameraId}
 												onChange={(e) => {
@@ -453,9 +543,53 @@ export function LaunchWindow() {
 												size={12}
 												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
 											/>
-										</>
-									))}
-							</div>
+										</div>
+										<div className="relative w-[104px] shrink-0">
+											<select
+												aria-label="Webcam shape"
+												value={liveStreamLayout.webcamMaskShape}
+												onChange={(event) =>
+													updateLiveStreamLayout({
+														webcamMaskShape: event.target.value as WebcamMaskShape,
+													})
+												}
+												className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10"
+											>
+												{WEBCAM_SHAPE_OPTIONS.map((shape) => (
+													<option key={shape.value} value={shape.value} className="bg-[#1c1c24]">
+														{shape.label}
+													</option>
+												))}
+											</select>
+											<ChevronDown
+												size={12}
+												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
+											/>
+										</div>
+										<div className="relative w-[78px] shrink-0">
+											<select
+												aria-label="Webcam size"
+												value={liveStreamLayout.webcamSizePreset}
+												onChange={(event) =>
+													updateLiveStreamLayout({
+														webcamSizePreset: Number(event.target.value),
+													})
+												}
+												className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10"
+											>
+												{WEBCAM_SIZE_OPTIONS.map((size) => (
+													<option key={size.value} value={size.value} className="bg-[#1c1c24]">
+														{size.label}
+													</option>
+												))}
+											</select>
+											<ChevronDown
+												size={12}
+												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
+											/>
+										</div>
+									</>
+								))}
 						</div>
 					)}
 				</div>
@@ -513,20 +647,46 @@ export function LaunchWindow() {
 					</button>
 				</Tooltip>
 
-				<button
-					className={`${hudGroupClasses} h-8 ${trayLayout === "vertical" ? "w-8 justify-center px-0" : "px-2.5"} ${styles.electronNoDrag}`}
-					onClick={openSourceSelector}
-					disabled={streaming}
+				<div
+					className={`${hudGroupClasses} h-8 ${
+						trayLayout === "vertical"
+							? screenSources.length > 1
+								? "w-[150px] px-2.5"
+								: "w-8 justify-center px-0"
+							: "px-2.5"
+					} ${styles.electronNoDrag}`}
 					title={selectedSourceLabel}
 					aria-label={selectedSourceLabel}
 				>
 					<MdMonitor size={ICON_SIZE} className="text-white/80" />
-					<span
-						className={`${trayLayout === "vertical" ? "sr-only" : "max-w-[86px]"} truncate text-[11px] font-medium text-white/75`}
-					>
-						{selectedSourceLabel}
-					</span>
-				</button>
+					{screenSources.length > 1 ? (
+						<div className="relative min-w-0">
+							<select
+								data-testid="launch-screen-select"
+								value={selectedSource?.id ?? ""}
+								disabled={streaming}
+								onChange={(event) => void selectScreenSource(event.target.value)}
+								className="max-w-[120px] appearance-none rounded-md border-0 bg-transparent py-1 pl-1 pr-6 text-[11px] font-medium text-white outline-none hover:text-white/90 focus-visible:ring-1 focus-visible:ring-white/20 disabled:opacity-45"
+							>
+								{screenSources.map((source, index) => (
+									<option key={source.id} value={source.id} className="bg-[#1c1c24]">
+										{source.name || `Screen ${index + 1}`}
+									</option>
+								))}
+							</select>
+							<ChevronDown
+								size={12}
+								className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
+							/>
+						</div>
+					) : (
+						<span
+							className={`${trayLayout === "vertical" ? "sr-only" : "max-w-[86px]"} truncate text-[11px] font-medium text-white/75`}
+						>
+							{screenSourcesLoading && !selectedSource ? "Loading..." : selectedSourceLabel}
+						</span>
+					)}
+				</div>
 
 				<div
 					className={`${hudGroupClasses} ${trayLayout === "vertical" ? "flex-col py-1" : ""} ${styles.electronNoDrag}`}
@@ -584,7 +744,7 @@ export function LaunchWindow() {
 							: "min-w-[36px] bg-white/[0.06] hover:bg-white/[0.10]"
 					} ${styles.electronNoDrag}`}
 					onClick={() => void openLiveStreamSetup()}
-					disabled={liveSetupPreparing || (!hasSelectedSource && !streaming)}
+					disabled={liveSetupPreparing || (!selectedSource && !streaming)}
 					style={{ flex: "0 0 auto" }}
 					title={streaming ? "Stop live stream" : "Start live stream"}
 				>
@@ -594,7 +754,7 @@ export function LaunchWindow() {
 						) : (
 							<RadioTower
 								size={ICON_SIZE}
-								className={hasSelectedSource ? "text-white/80" : "text-white/30"}
+								className={selectedSource ? "text-white/80" : "text-white/30"}
 							/>
 						)}
 						{streaming && (
@@ -695,10 +855,7 @@ export function LaunchWindow() {
 				open={liveSetupOpen}
 				onOpenChange={setLiveSetupOpen}
 				selectedSource={selectedSource}
-				webcamEnabled={webcamEnabled}
-				webcamDeviceId={webcamDeviceId}
 				layout={liveStreamLayout}
-				onLayoutChange={setLiveStreamLayout}
 				onStart={handleStartLiveStream}
 			/>
 		</div>

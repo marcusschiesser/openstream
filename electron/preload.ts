@@ -21,11 +21,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	moveHudOverlayBy: (deltaX: number, deltaY: number) => {
 		ipcRenderer.send("hud-overlay-move-by", deltaX, deltaY);
 	},
-	getSources: async (opts: Electron.SourcesOptions) => {
-		return await ipcRenderer.invoke("get-sources", opts);
+	setWebcamPreviewState: (state: WebcamPreviewState | null) => {
+		ipcRenderer.send("webcam-preview-state", state);
 	},
-	openSourceSelector: () => {
-		return ipcRenderer.invoke("open-source-selector");
+	onWebcamPreviewStateChanged: (callback: (state: WebcamPreviewState | null) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, state: WebcamPreviewState | null) => {
+			callback(state);
+		};
+		ipcRenderer.on("webcam-preview-state-changed", listener);
+		return () => ipcRenderer.removeListener("webcam-preview-state-changed", listener);
+	},
+	sendWebcamPreviewPosition: (position: WebcamPosition) => {
+		ipcRenderer.send("webcam-preview-position-changed", position);
+	},
+	setWebcamPreviewPointerMode: (mode: "passthrough" | "interactive") => {
+		ipcRenderer.send("webcam-preview-pointer-mode", mode);
+	},
+	getScreenSources: async () => {
+		return await ipcRenderer.invoke("get-screen-sources");
 	},
 	selectSource: (source: ProcessedDesktopSource) => {
 		return ipcRenderer.invoke("select-source", source);

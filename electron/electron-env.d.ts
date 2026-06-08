@@ -10,17 +10,7 @@ declare namespace NodeJS {
 interface Window {
 	electronAPI: {
 		assetBaseUrl: string;
-		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
-		openSourceSelector: () => Promise<{
-			opened: boolean;
-			reason?: string;
-			access?: {
-				success: boolean;
-				granted: boolean;
-				status: string;
-				error?: string;
-			};
-		}>;
+		getScreenSources: () => Promise<ProcessedDesktopSource[]>;
 		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource | null>;
 		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
 		captureSelectedSourcePreview: () => Promise<ProcessedDesktopSource | null>;
@@ -51,6 +41,16 @@ interface Window {
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;
 		setHudOverlayExpanded: (expanded: boolean) => void;
 		moveHudOverlayBy: (deltaX: number, deltaY: number) => void;
+		/** HUD -> main: show, update, or hide the separate screen-bound webcam preview window. */
+		setWebcamPreviewState: (state: WebcamPreviewState | null) => void;
+		/** Main -> renderers: publish the latest preview config, including drag-updated position. */
+		onWebcamPreviewStateChanged: (
+			callback: (state: WebcamPreviewState | null) => void,
+		) => () => void;
+		/** Preview -> main: send normalized PiP center coordinates after dragging the webcam. */
+		sendWebcamPreviewPosition: (position: WebcamPosition) => void;
+		/** Preview -> main: toggle OS-level click-through for the full-screen transparent window. */
+		setWebcamPreviewPointerMode: (mode: "passthrough" | "interactive") => void;
 		setLocale: (locale: string) => Promise<void>;
 	};
 }
@@ -60,5 +60,20 @@ interface ProcessedDesktopSource {
 	name: string;
 	display_id: string;
 	thumbnail: string | null;
-	appIcon: string | null;
+}
+
+interface WebcamPosition {
+	cx: number;
+	cy: number;
+}
+
+interface WebcamPreviewState {
+	enabled: boolean;
+	source: { id: string; display_id: string } | null;
+	webcamDeviceId?: string;
+	layout: {
+		webcamMaskShape: "rectangle" | "circle" | "square" | "rounded";
+		webcamSizePreset: number;
+		webcamPosition: WebcamPosition | null;
+	};
 }

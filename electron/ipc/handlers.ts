@@ -2,15 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { DesktopCapturerSource } from "electron";
-import {
-	app,
-	BrowserWindow,
-	desktopCapturer,
-	dialog,
-	ipcMain,
-	shell,
-	systemPreferences,
-} from "electron";
+import { app, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
 
 const FFMPEG_LIVE_STREAM_AUDIO_BITRATE = "160k";
 const FFMPEG_LIVE_STREAM_FPS = "30";
@@ -22,7 +14,6 @@ type SelectedSource = {
 	name: string;
 	display_id: string;
 	thumbnail: string | null;
-	appIcon: string | null;
 };
 
 type StartLiveStreamInput = {
@@ -53,8 +44,11 @@ function serializeDesktopSource(source: DesktopCapturerSource): SelectedSource {
 		name: source.name,
 		display_id: source.display_id,
 		thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
-		appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
 	};
+}
+
+function isScreenSource(source: Pick<SelectedSource, "id">): boolean {
+	return source.id.startsWith("screen:");
 }
 
 function resolveFfmpegPath(): string | null {
@@ -74,6 +68,10 @@ function resolveFfmpegPath(): string | null {
 		console.error("Failed to resolve bundled FFmpeg path:", error);
 		return null;
 	}
+}
+
+function isExpectedLiveStreamPipeError(error: NodeJS.ErrnoException): boolean {
+	return error.code === "EPIPE" || error.code === "ERR_STREAM_DESTROYED";
 }
 
 function waitForLiveStreamExit(): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
@@ -104,8 +102,15 @@ async function stopLiveStreamProcess() {
 	liveStreamStopping = true;
 	const exitPromise = waitForLiveStreamExit();
 
-	if (!proc.stdin.destroyed) {
-		proc.stdin.end();
+	if (!proc.stdin.destroyed && !proc.stdin.writableEnded) {
+		try {
+			proc.stdin.end();
+		} catch (error) {
+			const streamError = error as NodeJS.ErrnoException;
+			if (!isExpectedLiveStreamPipeError(streamError)) {
+				throw error;
+			}
+		}
 	}
 
 	let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -150,11 +155,7 @@ async function stopLiveStreamProcess() {
 	};
 }
 
-export function registerIpcHandlers(
-	createSourceSelectorWindow: () => BrowserWindow,
-	getMainWindow: () => BrowserWindow | null,
-	getSourceSelectorWindow: () => BrowserWindow | null,
-) {
+export function registerIpcHandlers(getMainWindow: () => Electron.BrowserWindow | null) {
 	async function requestScreenAccess() {
 		if (process.platform !== "darwin") {
 			return { success: true, granted: true, status: "granted" };
@@ -188,22 +189,34 @@ export function registerIpcHandlers(
 		}
 	}
 
-	ipcMain.handle("get-sources", async (_, opts: Electron.SourcesOptions) => {
-		const sources = await desktopCapturer.getSources(opts);
+	ipcMain.handle("get-screen-sources", async () => {
+		const sources = await desktopCapturer.getSources({
+			types: ["screen"],
+			thumbnailSize: { width: 320, height: 180 },
+			fetchWindowIcons: false,
+		});
 		lastEnumeratedSources = new Map(sources.map((source) => [source.id, source]));
+		if (!selectedSource || !sources.some((source) => source.id === selectedSource?.id)) {
+			const firstScreen = sources[0] ?? null;
+			selectedDesktopSource = firstScreen;
+			selectedSource = firstScreen ? serializeDesktopSource(firstScreen) : null;
+		}
 		return sources.map(serializeDesktopSource);
 	});
 
 	ipcMain.handle("select-source", async (_, source: SelectedSource) => {
+		if (!isScreenSource(source)) {
+			return selectedSource;
+		}
 		selectedSource = source;
 		selectedDesktopSource = lastEnumeratedSources.get(source.id) ?? null;
 
 		if (!selectedDesktopSource) {
 			try {
 				const sources = await desktopCapturer.getSources({
-					types: ["screen", "window"],
+					types: ["screen"],
 					thumbnailSize: { width: 0, height: 0 },
-					fetchWindowIcons: true,
+					fetchWindowIcons: false,
 				});
 				lastEnumeratedSources = new Map(sources.map((candidate) => [candidate.id, candidate]));
 				selectedDesktopSource = lastEnumeratedSources.get(source.id) ?? null;
@@ -212,7 +225,6 @@ export function registerIpcHandlers(
 			}
 		}
 
-		getSourceSelectorWindow()?.close();
 		return selectedSource;
 	});
 
@@ -223,28 +235,19 @@ export function registerIpcHandlers(
 			return null;
 		}
 
-		const isScreenSource = selectedSource.id.startsWith("screen:");
 		const mainWin = getMainWindow();
-		const sourceSelectorWin = getSourceSelectorWindow();
-		const shouldHideMainWin =
-			isScreenSource && mainWin && !mainWin.isDestroyed() && mainWin.isVisible();
-		const shouldHideSourceSelectorWin =
-			isScreenSource &&
-			sourceSelectorWin &&
-			!sourceSelectorWin.isDestroyed() &&
-			sourceSelectorWin.isVisible();
+		const shouldHideMainWin = mainWin && !mainWin.isDestroyed() && mainWin.isVisible();
 
 		try {
 			if (shouldHideMainWin) mainWin.hide();
-			if (shouldHideSourceSelectorWin) sourceSelectorWin.hide();
-			if (shouldHideMainWin || shouldHideSourceSelectorWin) {
+			if (shouldHideMainWin) {
 				await delay(180);
 			}
 
 			const sources = await desktopCapturer.getSources({
-				types: [isScreenSource ? "screen" : "window"],
+				types: ["screen"],
 				thumbnailSize: { width: 1280, height: 720 },
-				fetchWindowIcons: true,
+				fetchWindowIcons: false,
 			});
 			lastEnumeratedSources = new Map(sources.map((source) => [source.id, source]));
 			const refreshedSource =
@@ -265,9 +268,6 @@ export function registerIpcHandlers(
 			selectedSource = serializeDesktopSource(refreshedSource);
 			return selectedSource;
 		} finally {
-			if (shouldHideSourceSelectorWin && sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
-				sourceSelectorWin.showInactive();
-			}
 			if (shouldHideMainWin && mainWin && !mainWin.isDestroyed()) {
 				mainWin.showInactive();
 			}
@@ -302,42 +302,6 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("request-screen-access", async () => requestScreenAccess());
-
-	ipcMain.handle("open-source-selector", async () => {
-		const access = await requestScreenAccess();
-		if (!access.granted) {
-			if (process.platform === "darwin" && access.status !== "not-determined") {
-				const mainWin = getMainWindow();
-				const messageOptions = {
-					type: "warning",
-					buttons: ["Open System Settings", "Cancel"],
-					defaultId: 0,
-					cancelId: 1,
-					message: "Screen Recording permission is required",
-					detail:
-						"Allow OpenStream in macOS System Settings, then come back and choose a screen or window.",
-				} satisfies Electron.MessageBoxOptions;
-				const result =
-					mainWin && !mainWin.isDestroyed()
-						? await dialog.showMessageBox(mainWin, messageOptions)
-						: await dialog.showMessageBox(messageOptions);
-				if (result.response === 0) {
-					await shell.openExternal(
-						"x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-					);
-				}
-			}
-			return { opened: false, reason: "screen-access-required", access };
-		}
-
-		const sourceSelectorWin = getSourceSelectorWindow();
-		if (sourceSelectorWin) {
-			sourceSelectorWin.focus();
-			return { opened: true };
-		}
-		createSourceSelectorWindow();
-		return { opened: true };
-	});
 
 	ipcMain.handle("open-external-url", async (_, url: string) => {
 		try {
@@ -436,6 +400,16 @@ export function registerIpcHandlers(
 			}
 		});
 
+		proc.stdin.on("error", (error: NodeJS.ErrnoException) => {
+			if (isExpectedLiveStreamPipeError(error) && liveStreamStopping) {
+				return;
+			}
+			liveStreamStderr = `${liveStreamStderr}\n${error.message}`.trim();
+			if (!isExpectedLiveStreamPipeError(error)) {
+				console.error("Live stream FFmpeg stdin error:", error);
+			}
+		});
+
 		proc.once("error", (error) => {
 			if (liveStreamProcess === proc) {
 				liveStreamProcess = null;
@@ -458,7 +432,10 @@ export function registerIpcHandlers(
 
 	ipcMain.handle("write-live-stream-chunk", async (_, chunk: ArrayBuffer) => {
 		const proc = liveStreamProcess;
-		if (!proc || proc.stdin.destroyed) {
+		if (liveStreamStopping) {
+			return { success: true };
+		}
+		if (!proc || proc.stdin.destroyed || proc.stdin.writableEnded || !proc.stdin.writable) {
 			return { success: false, error: liveStreamStderr.trim() || "Live stream is not running." };
 		}
 
@@ -468,12 +445,32 @@ export function registerIpcHandlers(
 		}
 
 		return await new Promise<{ success: boolean; error?: string }>((resolve) => {
-			const onError = (error: Error) => resolve({ success: false, error: error.message });
-			proc.stdin.once("error", onError);
-			proc.stdin.write(buffer, () => {
+			let settled = false;
+			const finish = (result: { success: boolean; error?: string }) => {
+				if (settled) return;
+				settled = true;
 				proc.stdin.off("error", onError);
-				resolve({ success: true });
-			});
+				resolve(result);
+			};
+			const onError = (error: NodeJS.ErrnoException) => {
+				if (isExpectedLiveStreamPipeError(error) && liveStreamStopping) {
+					finish({ success: true });
+					return;
+				}
+				finish({ success: false, error: error.message });
+			};
+			proc.stdin.once("error", onError);
+			try {
+				proc.stdin.write(buffer, (error?: Error | null) => {
+					if (error) {
+						onError(error as NodeJS.ErrnoException);
+						return;
+					}
+					finish({ success: true });
+				});
+			} catch (error) {
+				onError(error as NodeJS.ErrnoException);
+			}
 		});
 	});
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
-import { SourceSelector } from "./components/launch/SourceSelector";
+import { WebcamPreviewWindow } from "./components/launch/WebcamPreviewWindow";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 
@@ -15,13 +15,13 @@ export default function App() {
 			setWindowType(type);
 		}
 
-		if (type === "hud-overlay" || type === "source-selector") {
+		if (type === "hud-overlay" || type === "webcam-preview") {
 			document.body.style.background = "transparent";
 			document.documentElement.style.background = "transparent";
 			document.getElementById("root")?.style.setProperty("background", "transparent");
 		}
 
-		if (type === "hud-overlay") {
+		if (type === "hud-overlay" || type === "webcam-preview") {
 			document.documentElement.style.height = "100%";
 			document.documentElement.style.overflow = "hidden";
 			document.body.style.height = "100%";
@@ -35,10 +35,10 @@ export default function App() {
 	}, [windowType]);
 
 	const content =
-		windowType === "source-selector" ? (
-			<SourceSelector />
-		) : windowType === "hud-overlay" ? (
+		windowType === "hud-overlay" ? (
 			<LaunchWindow />
+		) : windowType === "webcam-preview" ? (
+			<WebcamPreviewWindow />
 		) : (
 			<div className="flex h-full w-full items-center justify-center bg-[#07080a] text-white">
 				OpenStream
