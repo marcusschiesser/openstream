@@ -129,6 +129,27 @@ describe("LaunchWindow screen selection", () => {
 		expect(screen.queryByTestId("launch-screen-select")).not.toBeInTheDocument();
 	});
 
+	it("requests camera access on launch to activate the webcam by default", async () => {
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await waitFor(() => {
+			expect(window.electronAPI.requestCameraAccess).toHaveBeenCalled();
+		});
+		await waitFor(() => {
+			expect(window.electronAPI.setWebcamPreviewState).toHaveBeenCalledWith(
+				expect.objectContaining({ enabled: true }),
+			);
+		});
+	});
+
 	it("keeps the selected screen label visible during background refreshes", async () => {
 		vi.useFakeTimers();
 		const screenOne = makeScreen(1);

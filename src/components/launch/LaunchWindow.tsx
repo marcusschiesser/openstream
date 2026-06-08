@@ -101,6 +101,7 @@ export function LaunchWindow() {
 	);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
+	const autoEnabledWebcamRef = useRef(false);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState({
 		right: 12,
 		top: 12,
@@ -149,13 +150,6 @@ export function LaunchWindow() {
 			setWebcamDeviceId(selectedCameraId);
 		}
 	}, [selectedCameraId]);
-
-	useEffect(() => {
-		if (!import.meta.env.DEV) return;
-		void requestCameraAccess().catch((error) => {
-			console.warn("Failed to trigger camera access request during development:", error);
-		});
-	}, []);
 
 	useEffect(() => {
 		if (!isLanguageMenuOpen) return;
@@ -322,7 +316,7 @@ export function LaunchWindow() {
 		setSelectedSource(selected ?? source);
 	};
 
-	const setWebcamEnabled = async (enabled: boolean) => {
+	const setWebcamEnabled = useCallback(async (enabled: boolean) => {
 		if (!enabled) {
 			setWebcamEnabledState(false);
 			return;
@@ -331,7 +325,13 @@ export function LaunchWindow() {
 		if (access.success && access.granted) {
 			setWebcamEnabledState(true);
 		}
-	};
+	}, []);
+
+	useEffect(() => {
+		if (autoEnabledWebcamRef.current) return;
+		autoEnabledWebcamRef.current = true;
+		void setWebcamEnabled(true);
+	}, [setWebcamEnabled]);
 
 	const updateLiveStreamLayout = (next: Partial<LiveStreamLayout>) => {
 		setLiveStreamLayout((current) => ({ ...current, ...next }));
