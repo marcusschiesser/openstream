@@ -15,15 +15,11 @@ const ASSET_BASE_DIR = process.defaultApp
 const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
 let hudOverlayWindow: BrowserWindow | null = null;
-let hudOverlayCompactBounds: Electron.Rectangle | null = null;
-let hudOverlayExpanded = false;
 let webcamPreviewWindow: BrowserWindow | null = null;
 let webcamPreviewState: WebcamPreviewState | null = null;
 
 const HUD_COMPACT_WIDTH = 600;
 const HUD_COMPACT_HEIGHT = 160;
-const HUD_EXPANDED_WIDTH = 1000;
-const HUD_EXPANDED_HEIGHT = 760;
 
 type SelectedPreviewSource = {
 	id: string;
@@ -66,51 +62,20 @@ function getSourceOverlayBounds(source: SelectedPreviewSource): Electron.Rectang
 	return fallbackDisplay.workArea;
 }
 
-function applyHudOverlayBounds() {
-	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
-		return;
-	}
-
-	const currentDisplay = screen.getDisplayMatching(hudOverlayWindow.getBounds());
-	const workArea = currentDisplay.workArea;
-
-	if (hudOverlayExpanded) {
-		if (!hudOverlayCompactBounds) {
-			hudOverlayCompactBounds = hudOverlayWindow.getBounds();
-		}
-
-		const width = Math.min(HUD_EXPANDED_WIDTH, workArea.width);
-		const height = Math.min(HUD_EXPANDED_HEIGHT, workArea.height);
-		hudOverlayWindow.setMinimumSize(width, height);
-		hudOverlayWindow.setMaximumSize(width, height);
-		hudOverlayWindow.setBounds(
-			{
-				x: Math.round(workArea.x + (workArea.width - width) / 2),
-				y: Math.round(workArea.y + (workArea.height - height) / 2),
-				width,
-				height,
-			},
-			false,
-		);
-		return;
-	}
-
-	const compactBounds = hudOverlayCompactBounds ?? getCompactBounds(workArea);
-	hudOverlayWindow.setMinimumSize(HUD_COMPACT_WIDTH, HUD_COMPACT_HEIGHT);
-	hudOverlayWindow.setMaximumSize(HUD_COMPACT_WIDTH, HUD_COMPACT_HEIGHT);
-	hudOverlayWindow.setBounds(compactBounds, false);
-	hudOverlayCompactBounds = null;
-}
-
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		hudOverlayWindow.minimize();
 	}
 });
 
-ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
+ipcMain.on("hud-overlay-ignore-mouse-events", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayWindow.setIgnoreMouseEvents(ignore, { forward: true });
+		// The compact HUD must remain interactive at the OS window level. If it is
+		// click-through, the renderer cannot reliably receive the hover/click that
+		// should wake controls such as Destination, so clicks can fall through to the
+		// app underneath. The separate webcam preview window still owns pass-through
+		// behavior for the screen-sized overlay.
+		hudOverlayWindow.setIgnoreMouseEvents(false);
 	}
 });
 
@@ -131,11 +96,6 @@ ipcMain.on("hud-overlay-move-by", (_event, deltaX: number, deltaY: number) => {
 		return;
 	}
 	hudOverlayWindow.setPosition(nextX, nextY, false);
-});
-
-ipcMain.on("hud-overlay-expanded", (_event, expanded: boolean) => {
-	hudOverlayExpanded = expanded;
-	applyHudOverlayBounds();
 });
 
 function sendWebcamPreviewStateToPreview() {
@@ -233,7 +193,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			backgroundThrottling: false,
 		},
 	});
-	win.setIgnoreMouseEvents(true, { forward: true });
+	win.setIgnoreMouseEvents(false);
 
 	if (process.platform === "darwin") {
 		win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });

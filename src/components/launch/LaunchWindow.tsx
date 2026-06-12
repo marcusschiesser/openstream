@@ -16,6 +16,7 @@ import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useCameraDevices } from "../../hooks/useCameraDevices";
+import { useLiveDestination } from "../../hooks/useLiveDestination";
 import { useLiveStreamer } from "../../hooks/useLiveStreamer";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import type { WebcamMaskShape } from "../../lib/liveLayoutTypes";
@@ -27,11 +28,12 @@ import {
 import { requestCameraAccess } from "../../lib/requestCameraAccess";
 import { loadUserPreferences, saveUserPreferences } from "../../lib/userPreferences";
 import { formatTimePadded } from "../../utils/timeUtils";
-import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { DestinationPill } from "./DestinationPill";
 import styles from "./LaunchWindow.module.css";
-import { LiveStreamSetupDialog } from "./LiveStreamSetupDialog";
+import { MicPill } from "./MicPill";
+import { WebcamPill } from "./WebcamPill";
 
 const ICON_SIZE = 20;
 
@@ -86,15 +88,15 @@ export function LaunchWindow() {
 		webcamEnabled,
 		webcamDeviceId,
 	});
+	const destination = useLiveDestination();
 
+	const showDestinationControls = !streaming;
 	const showMicControls = microphoneEnabled && !streaming;
 	const showWebcamControls = webcamEnabled && !streaming;
-	const [isMicHovered, setIsMicHovered] = useState(false);
-	const [isMicFocused, setIsMicFocused] = useState(false);
-	const micExpanded = isMicHovered || isMicFocused;
-	const [isWebcamHovered, setIsWebcamHovered] = useState(false);
-	const [isWebcamFocused, setIsWebcamFocused] = useState(false);
-	const webcamExpanded = isWebcamHovered || isWebcamFocused;
+	const [destinationExpanded, setDestinationExpanded] = useState(false);
+	const [micExpanded, setMicExpanded] = useState(false);
+	const [webcamExpanded, setWebcamExpanded] = useState(false);
+	const anyHudControlExpanded = destinationExpanded || micExpanded || webcamExpanded;
 	const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
 	const [trayLayout, setTrayLayout] = useState<"horizontal" | "vertical">(
 		() => loadUserPreferences().trayLayout,
@@ -102,6 +104,7 @@ export function LaunchWindow() {
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
 	const autoEnabledWebcamRef = useRef(false);
+	const wasStreamingRef = useRef(false);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState({
 		right: 12,
 		top: 12,
@@ -211,7 +214,6 @@ export function LaunchWindow() {
 	const [selectedSource, setSelectedSource] = useState<ProcessedDesktopSource | null>(null);
 	const [screenSources, setScreenSources] = useState<ProcessedDesktopSource[]>([]);
 	const [screenSourcesLoading, setScreenSourcesLoading] = useState(true);
-	const [liveSetupOpen, setLiveSetupOpen] = useState(false);
 	const [liveSetupPreparing, setLiveSetupPreparing] = useState(false);
 	const [liveStreamLayout, setLiveStreamLayout] = useState<LiveStreamLayout>(
 		DEFAULT_LIVE_STREAM_LAYOUT,
@@ -222,13 +224,11 @@ export function LaunchWindow() {
 		webcamEnabled && Boolean(selectedSource) && !streaming && !previewHiddenForStreaming;
 
 	useEffect(() => {
-		window.electronAPI?.setHudOverlayExpanded?.(liveSetupOpen);
-		setHudMouseEventsEnabled(liveSetupOpen || isLanguageMenuOpen);
-	}, [isLanguageMenuOpen, liveSetupOpen, setHudMouseEventsEnabled]);
+		setHudMouseEventsEnabled(isLanguageMenuOpen);
+	}, [isLanguageMenuOpen, setHudMouseEventsEnabled]);
 
 	useEffect(() => {
 		return () => {
-			window.electronAPI?.setHudOverlayExpanded?.(false);
 			window.electronAPI?.setWebcamPreviewState?.(null);
 		};
 	}, []);
@@ -238,6 +238,14 @@ export function LaunchWindow() {
 			setPreviewHiddenForStreaming(false);
 		}
 	}, [streaming]);
+
+	useEffect(() => {
+		if (wasStreamingRef.current && !streaming) {
+			// Each streaming session needs a fresh key, so clear the used key after stop.
+			destination.clearStreamKey();
+		}
+		wasStreamingRef.current = streaming;
+	}, [destination.clearStreamKey, streaming]);
 
 	useEffect(() => {
 		window.electronAPI?.setWebcamPreviewState?.(
@@ -353,21 +361,32 @@ export function LaunchWindow() {
 		}
 	};
 
-	const openLiveStreamSetup = async () => {
+	const handleLiveStreamButtonClick = async () => {
 		if (streaming) {
 			void stopLiveStream();
 			return;
 		}
 		if (!selectedSource || liveSetupPreparing) return;
+		if (!destination.validate()) {
+			return;
+		}
 		setLiveSetupPreparing(true);
 		try {
 			const refreshedSource = await window.electronAPI?.captureSelectedSourcePreview?.();
 			if (refreshedSource) setSelectedSource(refreshedSource);
+			const started = await handleStartLiveStream({
+				serverUrl: destination.serverUrl,
+				streamKey: destination.streamKey,
+				layout: liveStreamLayout,
+			});
+			if (!started) {
+				destination.validate();
+			}
 		} catch (error) {
-			console.warn("Unable to refresh live stream preview source:", error);
+			console.warn("Unable to start live stream:", error);
+			destination.validate();
 		} finally {
 			setLiveSetupPreparing(false);
-			setLiveSetupOpen(true);
 		}
 	};
 
@@ -401,21 +420,22 @@ export function LaunchWindow() {
 		setHudMouseEventsEnabled(false);
 	};
 
+	const handleHudPointerMove = (
+		event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
+	) => {
+		const target = event.target as HTMLElement | null;
+		setHudMouseEventsEnabled(
+			isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']")),
+		);
+	};
+
 	return (
 		<div
 			className={`h-full w-full min-w-0 max-w-full overflow-hidden bg-transparent ${styles.electronDrag}`}
-			onPointerMove={(event) => {
-				if (liveSetupOpen) {
-					setHudMouseEventsEnabled(true);
-					return;
-				}
-				const target = event.target as HTMLElement | null;
-				setHudMouseEventsEnabled(
-					isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']")),
-				);
-			}}
+			onPointerMove={handleHudPointerMove}
+			onMouseMove={handleHudPointerMove}
 			onPointerLeave={() => {
-				if (!isLanguageMenuOpen && !liveSetupOpen) setHudMouseEventsEnabled(false);
+				if (!isLanguageMenuOpen) setHudMouseEventsEnabled(false);
 			}}
 		>
 			{systemLocaleSuggestion && (
@@ -451,146 +471,63 @@ export function LaunchWindow() {
 				</div>
 			)}
 
-			{(showMicControls || showWebcamControls) && (
+			{(showDestinationControls || showMicControls || showWebcamControls) && (
 				<div
 					data-hud-interactive="true"
-					className={`fixed bottom-[68px] left-1/2 -translate-x-1/2 flex items-center gap-2 ${styles.electronNoDrag}`}
+					className={`fixed bottom-[68px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-nowrap items-end justify-center gap-2 ${styles.electronNoDrag}`}
 				>
-					{showMicControls && (
-						<div
-							className={`flex h-9 items-center gap-2 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0b0c10]/90 px-3 py-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 ${!micExpanded ? "opacity-60 grayscale-[0.5]" : "opacity-100"}`}
-							onMouseEnter={() => setIsMicHovered(true)}
-							onMouseLeave={() => setIsMicHovered(false)}
-							onFocus={() => setIsMicFocused(true)}
-							onBlur={() => setIsMicFocused(false)}
-							style={{ width: micExpanded ? "240px" : "140px" }}
-						>
-							<div className="relative flex-1 min-w-0">
-								{!micExpanded && (
-									<div className="truncate text-[10px] font-medium text-white/60">
-										{selectedMicLabel}
-									</div>
-								)}
-								<select
-									value={microphoneDeviceId || selectedMicId}
-									onChange={(e) => {
-										setSelectedMicId(e.target.value);
-										setMicrophoneDeviceId(e.target.value);
-									}}
-									className={`w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10 ${!micExpanded ? "sr-only" : ""}`}
-								>
-									{micDevices.map((device) => (
-										<option key={device.deviceId} value={device.deviceId} className="bg-[#1c1c24]">
-											{device.label}
-										</option>
-									))}
-								</select>
-								{micExpanded && (
-									<ChevronDown
-										size={12}
-										className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
-									/>
-								)}
-							</div>
-							<AudioLevelMeter level={level} className={`${micExpanded ? "w-16" : "w-8"} h-2`} />
-						</div>
+					{showDestinationControls && (destinationExpanded || !anyHudControlExpanded) && (
+						<DestinationPill
+							destination={destination}
+							forceExpanded={Boolean(destination.error)}
+							onExpandedChange={setDestinationExpanded}
+							onRequestInteraction={() => setHudMouseEventsEnabled(true)}
+						/>
 					)}
-					{showWebcamControls && (
-						<div
-							className={`flex h-9 items-center gap-2 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0b0c10]/90 px-3 py-1.5 shadow-[0_18px_42px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 ${!webcamExpanded ? "opacity-60 grayscale-[0.5]" : "opacity-100"}`}
-							onMouseEnter={() => setIsWebcamHovered(true)}
-							onMouseLeave={() => setIsWebcamHovered(false)}
-							onFocus={() => setIsWebcamFocused(true)}
-							onBlur={() => setIsWebcamFocused(false)}
-							style={{ width: webcamExpanded ? "430px" : "140px" }}
-						>
-							{!webcamExpanded && (
-								<div className="min-w-0 flex-1 truncate text-[10px] font-medium text-white/60">
-									{selectedCameraLabel}
-								</div>
-							)}
-							{webcamExpanded &&
-								(isCameraDevicesLoading ? (
-									<span className="text-[10px] italic text-white/40">{t("webcam.searching")}</span>
-								) : cameraDevicesError ? (
-									<span className="text-[10px] italic text-white/40">
-										{t("webcam.unavailable")}
-									</span>
-								) : cameraDevices.length === 0 ? (
-									<span className="text-[10px] italic text-white/40">{t("webcam.noneFound")}</span>
-								) : (
-									<>
-										<div className="relative min-w-0 flex-1">
-											<select
-												value={webcamDeviceId || selectedCameraId}
-												onChange={(e) => {
-													setSelectedCameraId(e.target.value);
-													setWebcamDeviceId(e.target.value);
-												}}
-												className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10"
-											>
-												{cameraDevices.map((device) => (
-													<option
-														key={device.deviceId}
-														value={device.deviceId}
-														className="bg-[#1c1c24]"
-													>
-														{device.label}
-													</option>
-												))}
-											</select>
-											<ChevronDown
-												size={12}
-												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
-											/>
-										</div>
-										<div className="relative w-[104px] shrink-0">
-											<select
-												aria-label="Webcam shape"
-												value={liveStreamLayout.webcamMaskShape}
-												onChange={(event) =>
-													updateLiveStreamLayout({
-														webcamMaskShape: event.target.value as WebcamMaskShape,
-													})
-												}
-												className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10"
-											>
-												{WEBCAM_SHAPE_OPTIONS.map((shape) => (
-													<option key={shape.value} value={shape.value} className="bg-[#1c1c24]">
-														{shape.label}
-													</option>
-												))}
-											</select>
-											<ChevronDown
-												size={12}
-												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
-											/>
-										</div>
-										<div className="relative w-[78px] shrink-0">
-											<select
-												aria-label="Webcam size"
-												value={liveStreamLayout.webcamSizePreset}
-												onChange={(event) =>
-													updateLiveStreamLayout({
-														webcamSizePreset: Number(event.target.value),
-													})
-												}
-												className="w-full appearance-none rounded-lg border border-white/10 bg-white/5 py-1 pl-2 pr-6 text-[11px] text-white outline-none hover:bg-white/10"
-											>
-												{WEBCAM_SIZE_OPTIONS.map((size) => (
-													<option key={size.value} value={size.value} className="bg-[#1c1c24]">
-														{size.label}
-													</option>
-												))}
-											</select>
-											<ChevronDown
-												size={12}
-												className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-white/40"
-											/>
-										</div>
-									</>
-								))}
-						</div>
+					{showMicControls && (micExpanded || !anyHudControlExpanded) && (
+						<MicPill
+							microphone={{
+								devices: micDevices,
+								level,
+								selectedDeviceId: microphoneDeviceId || selectedMicId,
+								selectedLabel: selectedMicLabel,
+								setDeviceId: (deviceId) => {
+									setSelectedMicId(deviceId);
+									setMicrophoneDeviceId(deviceId);
+								},
+							}}
+							onExpandedChange={setMicExpanded}
+							onRequestInteraction={() => setHudMouseEventsEnabled(true)}
+						/>
+					)}
+					{showWebcamControls && (webcamExpanded || !anyHudControlExpanded) && (
+						<WebcamPill
+							webcam={{
+								devices: cameraDevices,
+								error: cameraDevicesError,
+								isLoading: isCameraDevicesLoading,
+								selectedDeviceId: webcamDeviceId || selectedCameraId,
+								selectedLabel: selectedCameraLabel,
+								setDeviceId: (deviceId) => {
+									setSelectedCameraId(deviceId);
+									setWebcamDeviceId(deviceId);
+								},
+							}}
+							layout={{
+								shape: liveStreamLayout.webcamMaskShape,
+								shapeOptions: WEBCAM_SHAPE_OPTIONS,
+								size: liveStreamLayout.webcamSizePreset,
+								sizeOptions: WEBCAM_SIZE_OPTIONS,
+								setShape: (shape) => {
+									updateLiveStreamLayout({ webcamMaskShape: shape });
+								},
+								setSize: (size) => {
+									updateLiveStreamLayout({ webcamSizePreset: size });
+								},
+							}}
+							onExpandedChange={setWebcamExpanded}
+							onRequestInteraction={() => setHudMouseEventsEnabled(true)}
+						/>
 					)}
 				</div>
 			)}
@@ -607,7 +544,7 @@ export function LaunchWindow() {
 				onPointerDown={() => setHudMouseEventsEnabled(true)}
 				onMouseEnter={() => setHudMouseEventsEnabled(true)}
 				onMouseLeave={() => {
-					if (!isLanguageMenuOpen && !liveSetupOpen) setHudMouseEventsEnabled(false);
+					if (!isLanguageMenuOpen) setHudMouseEventsEnabled(false);
 				}}
 			>
 				<div
@@ -743,7 +680,7 @@ export function LaunchWindow() {
 							? "min-w-[78px] bg-emerald-500/12 hover:bg-emerald-500/16"
 							: "min-w-[36px] bg-white/[0.06] hover:bg-white/[0.10]"
 					} ${styles.electronNoDrag}`}
-					onClick={() => void openLiveStreamSetup()}
+					onClick={() => void handleLiveStreamButtonClick()}
 					disabled={liveSetupPreparing || (!selectedSource && !streaming)}
 					style={{ flex: "0 0 auto" }}
 					title={streaming ? "Stop live stream" : "Start live stream"}
@@ -850,14 +787,6 @@ export function LaunchWindow() {
 					</div>
 				</div>
 			</div>
-
-			<LiveStreamSetupDialog
-				open={liveSetupOpen}
-				onOpenChange={setLiveSetupOpen}
-				selectedSource={selectedSource}
-				layout={liveStreamLayout}
-				onStart={handleStartLiveStream}
-			/>
 		</div>
 	);
 }

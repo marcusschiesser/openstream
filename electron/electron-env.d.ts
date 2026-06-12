@@ -39,7 +39,6 @@ interface Window {
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;
-		setHudOverlayExpanded: (expanded: boolean) => void;
 		moveHudOverlayBy: (deltaX: number, deltaY: number) => void;
 		/** HUD -> main: show, update, or hide the separate screen-bound webcam preview window. */
 		setWebcamPreviewState: (state: WebcamPreviewState | null) => void;
