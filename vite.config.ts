@@ -13,8 +13,8 @@ function readRequiredBuildEnv(name: string, command: string) {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
-	const youtubeClientId = readRequiredBuildEnv("OPENSTREAM_YOUTUBE_CLIENT_ID", command);
-	const youtubeClientSecret = readRequiredBuildEnv("OPENSTREAM_YOUTUBE_CLIENT_SECRET", command);
+	const youtubeClientId = readRequiredBuildEnv("YOUTUBE_CLIENT_ID", command);
+	const youtubeClientSecret = readRequiredBuildEnv("YOUTUBE_CLIENT_SECRET", command);
 	const electronMainConfig: UserConfig = {
 		define: {
 			__OPENSTREAM_YOUTUBE_CLIENT_ID__: youtubeClientId

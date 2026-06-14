@@ -30,24 +30,24 @@ their own Google account.
 For local development, set the values in your shell before starting the app:
 
 ```sh
-export OPENSTREAM_YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
-export OPENSTREAM_YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
+export YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
+export YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
 npm run dev
 ```
 
 Local production builds require the same variables:
 
 ```sh
-export OPENSTREAM_YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
-export OPENSTREAM_YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
+export YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
+export YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
 npm run build
 ```
 
 For GitHub Actions, store both values as repository secrets in
 `Settings -> Secrets and variables -> Actions -> Repository secrets`:
 
-- `OPENSTREAM_YOUTUBE_CLIENT_ID`
-- `OPENSTREAM_YOUTUBE_CLIENT_SECRET`
+- `YOUTUBE_CLIENT_ID`
+- `YOUTUBE_CLIENT_SECRET`
 
 The CI and release workflows pass these secrets to the build steps.
 
