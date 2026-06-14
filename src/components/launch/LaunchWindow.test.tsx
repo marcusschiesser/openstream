@@ -13,6 +13,22 @@ const deviceHookMocks = vi.hoisted(() => ({
 	micDevices: [] as Array<{ deviceId: string; label: string }>,
 	selectedMicId: "",
 	setSelectedMicId: vi.fn(),
+	streaming: false,
+	streamElapsedSeconds: 0,
+	startLiveStream: vi.fn(),
+	stopLiveStream: vi.fn(),
+	liveStreamerConfig: null as {
+		onProviderWatchUrl?: (watchUrl: string) => void;
+		onProviderStatus?: (status: {
+			status: string | null;
+			timerStarted: boolean;
+			stopAllowed: boolean;
+			startedAt: number | null;
+		}) => void;
+	} | null,
+	providerTimerStarted: false,
+	providerStopAllowed: false,
+	providerStatus: null as string | null,
 }));
 
 vi.mock("@/contexts/I18nContext", () => ({
@@ -61,12 +77,18 @@ vi.mock("../../hooks/useCameraDevices", () => ({
 }));
 
 vi.mock("../../hooks/useLiveStreamer", () => ({
-	useLiveStreamer: () => ({
-		streaming: false,
-		streamElapsedSeconds: 0,
-		startLiveStream: vi.fn(),
-		stopLiveStream: vi.fn(),
-	}),
+	useLiveStreamer: (config: typeof deviceHookMocks.liveStreamerConfig) => {
+		deviceHookMocks.liveStreamerConfig = config;
+		return {
+			streaming: deviceHookMocks.streaming,
+			providerTimerStarted: deviceHookMocks.providerTimerStarted,
+			providerStopAllowed: deviceHookMocks.providerStopAllowed,
+			providerStatus: deviceHookMocks.providerStatus,
+			streamElapsedSeconds: deviceHookMocks.streamElapsedSeconds,
+			startLiveStream: deviceHookMocks.startLiveStream,
+			stopLiveStream: deviceHookMocks.stopLiveStream,
+		};
+	},
 }));
 
 vi.mock("../../hooks/useMicrophoneDevices", () => ({
@@ -102,6 +124,14 @@ describe("LaunchWindow screen selection", () => {
 		deviceHookMocks.micDevices = [];
 		deviceHookMocks.selectedMicId = "";
 		deviceHookMocks.setSelectedMicId.mockClear();
+		deviceHookMocks.streaming = false;
+		deviceHookMocks.providerTimerStarted = false;
+		deviceHookMocks.providerStopAllowed = false;
+		deviceHookMocks.providerStatus = null;
+		deviceHookMocks.streamElapsedSeconds = 0;
+		deviceHookMocks.startLiveStream.mockReset();
+		deviceHookMocks.stopLiveStream.mockReset();
+		deviceHookMocks.liveStreamerConfig = null;
 		window.electronAPI = {
 			...window.electronAPI,
 			getScreenSources: vi.fn(),
@@ -118,12 +148,28 @@ describe("LaunchWindow screen selection", () => {
 				granted: true,
 				status: "granted",
 			}),
+			copyToClipboard: vi.fn().mockResolvedValue({ success: true }),
 			setHudOverlayIgnoreMouseEvents: vi.fn(),
 			moveHudOverlayBy: vi.fn(),
 			setWebcamPreviewState: vi.fn(),
 			onWebcamPreviewStateChanged: vi.fn(() => vi.fn()),
 			sendWebcamPreviewPosition: vi.fn(),
 			setWebcamPreviewPointerMode: vi.fn(),
+			youtubeAuthStatus: vi.fn().mockResolvedValue({ configured: true, authenticated: false }),
+			youtubeAuthStart: vi.fn().mockResolvedValue({ success: true }),
+			youtubeCreateLiveStream: vi.fn().mockResolvedValue({
+				success: true,
+				liveStream: {
+					broadcastId: "broadcast-1",
+					streamId: "stream-1",
+					watchUrl: "https://www.youtube.com/watch?v=broadcast-1",
+					ingestionUrl: "rtmps://a.rtmps.youtube.com/live2/stream-key",
+				},
+			}),
+			youtubeGetBroadcastStatus: vi.fn().mockResolvedValue({
+				success: true,
+				lifeCycleStatus: "live",
+			}),
 		} as typeof window.electronAPI;
 	});
 
@@ -265,6 +311,40 @@ describe("LaunchWindow screen selection", () => {
 		expect(window.electronAPI.captureSelectedSourcePreview).not.toHaveBeenCalled();
 	});
 
+	it("pulses the live stream icon while the stream is starting", async () => {
+		const screenOne = makeScreen(1);
+		let resolveStart: ((started: boolean) => void) | null = null;
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+		deviceHookMocks.startLiveStream.mockImplementation(
+			() =>
+				new Promise<boolean>((resolve) => {
+					resolveStart = resolve;
+				}),
+		);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
+		fireEvent.change(screen.getByLabelText("Stream key"), { target: { value: "abc123" } });
+		fireEvent.click(screen.getByTestId("launch-live-stream-button"));
+
+		await waitFor(() => {
+			const icon = screen.getByTestId("launch-live-stream-button").querySelector("svg");
+			expect(icon).toHaveClass("animate-pulse");
+		});
+
+		await act(async () => {
+			resolveStart?.(false);
+			await flushPromises();
+		});
+	});
+
 	it("shows the destination pill by default and expands it on hover", async () => {
 		const screenOne = makeScreen(1);
 		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
@@ -286,6 +366,172 @@ describe("LaunchWindow screen selection", () => {
 		fireEvent.pointerMove(readOnlyDestination);
 		expect(screen.getByLabelText("Server URL")).toBeInTheDocument();
 		expect(screen.getByLabelText("Stream key")).toBeInTheDocument();
+	});
+
+	it("switches the destination pill to YouTube and signs in", async () => {
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		const readOnlyDestination = screen.getByText("rtmp://a.rtmp.youtube.com/live2");
+		fireEvent.pointerMove(readOnlyDestination);
+		fireEvent.click(screen.getByText("YouTube Live"));
+		expect(await screen.findByText("Sign in with Google")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByText("Sign in with Google"));
+
+		await waitFor(() => {
+			expect(window.electronAPI.youtubeAuthStart).toHaveBeenCalled();
+		});
+		expect(await screen.findByText("Signed in with Google")).toBeInTheDocument();
+	});
+
+	it("keeps the YouTube live URL visible while streaming", async () => {
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+
+		const { rerender } = render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
+		fireEvent.click(screen.getByText("YouTube Live"));
+		fireEvent.click(await screen.findByText("Sign in with Google"));
+		await screen.findByText("Signed in with Google");
+
+		act(() => {
+			deviceHookMocks.streaming = true;
+			deviceHookMocks.streamElapsedSeconds = 9;
+			rerender(
+				<TooltipProvider>
+					<LaunchWindow />
+				</TooltipProvider>,
+			);
+		});
+
+		expect(screen.getByText("YouTube Live")).toBeInTheDocument();
+		expect(
+			screen.queryByText("https://www.youtube.com/watch?v=broadcast-1"),
+		).not.toBeInTheDocument();
+		expect(screen.queryByLabelText("Copy YouTube live URL")).not.toBeInTheDocument();
+		expect(screen.queryByText("00:09")).not.toBeInTheDocument();
+
+		act(() => {
+			deviceHookMocks.liveStreamerConfig?.onProviderWatchUrl?.(
+				"https://www.youtube.com/watch?v=broadcast-1",
+			);
+		});
+
+		expect(screen.getByText("https://www.youtube.com/watch?v=broadcast-1")).toBeInTheDocument();
+		expect(
+			screen.queryByText("Last stream: https://www.youtube.com/watch?v=broadcast-1"),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText("00:09")).not.toBeInTheDocument();
+
+		act(() => {
+			deviceHookMocks.liveStreamerConfig?.onProviderStatus?.({
+				status: "ready",
+				timerStarted: true,
+				stopAllowed: false,
+				startedAt: Date.now() - 9000,
+			});
+			deviceHookMocks.providerTimerStarted = true;
+			rerender(
+				<TooltipProvider>
+					<LaunchWindow />
+				</TooltipProvider>,
+			);
+		});
+
+		expect(screen.getByText("https://www.youtube.com/watch?v=broadcast-1")).toBeInTheDocument();
+		expect(screen.getByText("YouTube: ready")).toBeInTheDocument();
+		expect(screen.getByText("00:09")).toBeInTheDocument();
+	});
+
+	it("locks YouTube stop until the provider reaches live", async () => {
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+
+		const { rerender } = render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
+		fireEvent.click(screen.getByText("YouTube Live"));
+		fireEvent.click(await screen.findByText("Sign in with Google"));
+		await screen.findByText("Signed in with Google");
+
+		act(() => {
+			deviceHookMocks.liveStreamerConfig?.onProviderWatchUrl?.(
+				"https://www.youtube.com/watch?v=broadcast-1",
+			);
+			deviceHookMocks.liveStreamerConfig?.onProviderStatus?.({
+				status: "ready",
+				timerStarted: true,
+				stopAllowed: false,
+				startedAt: Date.now() - 9000,
+			});
+			deviceHookMocks.streaming = true;
+			deviceHookMocks.providerTimerStarted = true;
+			deviceHookMocks.providerStopAllowed = false;
+			deviceHookMocks.streamElapsedSeconds = 9;
+			rerender(
+				<TooltipProvider>
+					<LaunchWindow />
+				</TooltipProvider>,
+			);
+		});
+
+		const stopButton = screen.getByTestId("launch-live-stream-button");
+		expect(stopButton).toBeDisabled();
+		expect(stopButton).not.toHaveAttribute("title");
+		expect(stopButton.closest("[title]")).toHaveAttribute(
+			"title",
+			"Stop will be available once stream is live.",
+		);
+		fireEvent.click(stopButton);
+		expect(deviceHookMocks.stopLiveStream).not.toHaveBeenCalled();
+		expect(screen.getByText("YouTube: ready")).toBeInTheDocument();
+		expect(screen.getByText("00:09")).toBeInTheDocument();
+
+		act(() => {
+			deviceHookMocks.liveStreamerConfig?.onProviderStatus?.({
+				status: "live",
+				timerStarted: true,
+				stopAllowed: true,
+				startedAt: null,
+			});
+			deviceHookMocks.providerStopAllowed = true;
+			deviceHookMocks.streamElapsedSeconds = 9;
+			rerender(
+				<TooltipProvider>
+					<LaunchWindow />
+				</TooltipProvider>,
+			);
+		});
+
+		expect(screen.getByTestId("launch-live-stream-button")).not.toBeDisabled();
+		expect(screen.getByTestId("launch-live-stream-button")).toHaveAttribute(
+			"title",
+			"Stop live stream",
+		);
+		expect(screen.getByText("YouTube: live")).toBeInTheDocument();
+		expect(screen.getByText("00:09")).toBeInTheDocument();
 	});
 
 	it("hides readonly control pills while destination controls are expanded", async () => {

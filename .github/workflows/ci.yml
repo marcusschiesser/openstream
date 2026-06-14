@@ -40,3 +40,6 @@ jobs:
 
       - name: Build Vite and Electron
         run: npm run build-vite
+        env:
+          OPENSTREAM_YOUTUBE_CLIENT_ID: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_ID }}
+          OPENSTREAM_YOUTUBE_CLIENT_SECRET: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_SECRET }}

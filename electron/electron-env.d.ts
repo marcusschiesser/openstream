@@ -27,7 +27,27 @@ interface Window {
 			error?: string;
 		}>;
 		openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
+		copyToClipboard: (text: string) => Promise<{ success: boolean; error?: string }>;
 		getPlatform: () => Promise<string>;
+		youtubeAuthStatus: () => Promise<{ configured: boolean; authenticated: boolean }>;
+		youtubeAuthStart: () => Promise<{ success: boolean; error?: string }>;
+		youtubeCreateLiveStream: () => Promise<{
+			success: boolean;
+			error?: string;
+			liveStream?: {
+				broadcastId: string;
+				streamId: string;
+				watchUrl: string;
+				ingestionUrl: string;
+			};
+		}>;
+		youtubeGetBroadcastStatus: (input: { broadcastId: string }) => Promise<
+			| {
+					success: true;
+					lifeCycleStatus: string | null;
+			  }
+			| { success: false; error: string }
+		>;
 		startLiveStream: (input: {
 			destinationUrl: string;
 			width: number;

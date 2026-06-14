@@ -7,12 +7,25 @@ export interface LiveStreamLayout {
 	webcamPosition: WebcamPosition | null;
 }
 
-export interface LiveStreamDestinationInput {
+export type LiveStreamDestinationProvider = "rtmp" | "youtube";
+
+export interface RtmpLiveStreamDestinationInput {
+	provider: "rtmp";
 	serverUrl: string;
 	streamKey: string;
 }
 
-export interface LiveStreamStartConfig extends LiveStreamDestinationInput {
+export interface YouTubeLiveStreamDestinationInput {
+	provider: "youtube";
+	isAuthenticated: boolean;
+}
+
+export type LiveStreamDestinationInput =
+	| RtmpLiveStreamDestinationInput
+	| YouTubeLiveStreamDestinationInput;
+
+export interface LiveStreamStartConfig {
+	destination: LiveStreamDestinationInput;
 	layout: LiveStreamLayout;
 }
 
@@ -34,7 +47,19 @@ export function joinRtmpsUrl(serverUrl: string, streamKey: string): string {
 	return `${normalizeRtmpsServerUrl(serverUrl)}/${streamKey.trim()}`;
 }
 
+export function joinYouTubeIngestionUrl(ingestionAddress: string, streamName: string): string {
+	return joinRtmpsUrl(ingestionAddress, streamName);
+}
+
+export function getYouTubeWatchUrl(broadcastId: string): string {
+	return `https://www.youtube.com/watch?v=${encodeURIComponent(broadcastId)}`;
+}
+
 export function validateLiveStreamDestination(input: LiveStreamDestinationInput): string | null {
+	if (input.provider === "youtube") {
+		return input.isAuthenticated ? null : "Sign in with Google to stream to YouTube Live.";
+	}
+
 	const serverUrl = normalizeRtmpsServerUrl(input.serverUrl);
 	const streamKey = input.streamKey.trim();
 

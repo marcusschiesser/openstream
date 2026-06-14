@@ -81,18 +81,41 @@ export function LaunchWindow() {
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
-	const { streaming, streamElapsedSeconds, startLiveStream, stopLiveStream } = useLiveStreamer({
+	const destination = useLiveDestination();
+	const {
+		streaming,
+		providerTimerStarted,
+		providerStopAllowed,
+		streamElapsedSeconds,
+		startLiveStream,
+		stopLiveStream,
+	} = useLiveStreamer({
 		systemAudioEnabled,
 		microphoneEnabled,
 		microphoneDeviceId,
 		webcamEnabled,
 		webcamDeviceId,
+		onProviderWatchUrl: (watchUrl) => {
+			destination.youtube.setWatchUrl(watchUrl);
+		},
+		onProviderStatus: (status) => {
+			destination.youtube.setStatus(status.status);
+			if (status.timerStarted) {
+				destination.youtube.setCreatingStream(false);
+			}
+		},
 	});
-	const destination = useLiveDestination();
 
-	const showDestinationControls = !streaming;
+	const showStreamingYouTubeDestination = streaming && destination.provider === "youtube";
+	const showDestinationControls = !streaming || showStreamingYouTubeDestination;
 	const showMicControls = microphoneEnabled && !streaming;
 	const showWebcamControls = webcamEnabled && !streaming;
+	const liveStreamStopLocked = streaming && !providerStopAllowed;
+	const liveStreamButtonTitle = streaming
+		? providerStopAllowed
+			? "Stop live stream"
+			: "Stop will be available once stream is live."
+		: "Start live stream";
 	const [destinationExpanded, setDestinationExpanded] = useState(false);
 	const [micExpanded, setMicExpanded] = useState(false);
 	const [webcamExpanded, setWebcamExpanded] = useState(false);
@@ -215,6 +238,7 @@ export function LaunchWindow() {
 	const [screenSources, setScreenSources] = useState<ProcessedDesktopSource[]>([]);
 	const [screenSourcesLoading, setScreenSourcesLoading] = useState(true);
 	const [liveSetupPreparing, setLiveSetupPreparing] = useState(false);
+	const liveStreamStarting = liveSetupPreparing && !streaming;
 	const [liveStreamLayout, setLiveStreamLayout] = useState<LiveStreamLayout>(
 		DEFAULT_LIVE_STREAM_LAYOUT,
 	);
@@ -241,11 +265,10 @@ export function LaunchWindow() {
 
 	useEffect(() => {
 		if (wasStreamingRef.current && !streaming) {
-			// Each streaming session needs a fresh key, so clear the used key after stop.
-			destination.clearStreamKey();
+			destination.finish();
 		}
 		wasStreamingRef.current = streaming;
-	}, [destination.clearStreamKey, streaming]);
+	}, [destination.finish, streaming]);
 
 	useEffect(() => {
 		window.electronAPI?.setWebcamPreviewState?.(
@@ -363,20 +386,22 @@ export function LaunchWindow() {
 
 	const handleLiveStreamButtonClick = async () => {
 		if (streaming) {
+			if (!providerStopAllowed) {
+				return;
+			}
 			void stopLiveStream();
 			return;
 		}
 		if (!selectedSource || liveSetupPreparing) return;
-		if (!destination.validate()) {
-			return;
-		}
+		const streamDestination = await destination.prepareStart();
+		if (!streamDestination) return;
 		setLiveSetupPreparing(true);
+		let started = false;
 		try {
 			const refreshedSource = await window.electronAPI?.captureSelectedSourcePreview?.();
 			if (refreshedSource) setSelectedSource(refreshedSource);
-			const started = await handleStartLiveStream({
-				serverUrl: destination.serverUrl,
-				streamKey: destination.streamKey,
+			started = await handleStartLiveStream({
+				destination: streamDestination,
 				layout: liveStreamLayout,
 			});
 			if (!started) {
@@ -386,6 +411,9 @@ export function LaunchWindow() {
 			console.warn("Unable to start live stream:", error);
 			destination.validate();
 		} finally {
+			if (!started) {
+				destination.cleanup();
+			}
 			setLiveSetupPreparing(false);
 		}
 	};
@@ -428,6 +456,44 @@ export function LaunchWindow() {
 			isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']")),
 		);
 	};
+
+	const liveStreamButton = (
+		<button
+			data-testid="launch-live-stream-button"
+			className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${
+				streaming
+					? "min-w-[78px] bg-emerald-500/12 hover:bg-emerald-500/16"
+					: "min-w-[36px] bg-white/[0.06] hover:bg-white/[0.10]"
+			} disabled:cursor-not-allowed disabled:opacity-70 ${styles.electronNoDrag}`}
+			onClick={() => void handleLiveStreamButtonClick()}
+			disabled={liveSetupPreparing || (!selectedSource && !streaming) || liveStreamStopLocked}
+			style={{ flex: "0 0 auto" }}
+			title={liveStreamStopLocked ? undefined : liveStreamButtonTitle}
+			aria-label={liveStreamButtonTitle}
+		>
+			<div className={`flex items-center justify-center ${streaming ? "gap-1.5" : ""}`}>
+				{streaming ? (
+					<FiX size={ICON_SIZE} className="text-emerald-300" />
+				) : (
+					<RadioTower
+						size={ICON_SIZE}
+						className={
+							liveStreamStarting
+								? "animate-pulse text-emerald-300"
+								: selectedSource
+									? "text-white/80"
+									: "text-white/30"
+						}
+					/>
+				)}
+				{streaming && providerTimerStarted && (
+					<span className="inline-block w-[34px] text-left text-xs font-semibold tabular-nums text-emerald-300">
+						{formatTimePadded(streamElapsedSeconds)}
+					</span>
+				)}
+			</div>
+		</button>
+	);
 
 	return (
 		<div
@@ -480,6 +546,8 @@ export function LaunchWindow() {
 						<DestinationPill
 							destination={destination}
 							forceExpanded={Boolean(destination.error)}
+							isStreaming={streaming}
+							readOnly={streaming}
 							onExpandedChange={setDestinationExpanded}
 							onRequestInteraction={() => setHudMouseEventsEnabled(true)}
 						/>
@@ -673,34 +741,19 @@ export function LaunchWindow() {
 					</button>
 				</div>
 
-				<button
-					data-testid="launch-live-stream-button"
-					className={`flex items-center justify-center rounded-full p-2 transition-[min-width,background-color] duration-150 ${
-						streaming
-							? "min-w-[78px] bg-emerald-500/12 hover:bg-emerald-500/16"
-							: "min-w-[36px] bg-white/[0.06] hover:bg-white/[0.10]"
-					} ${styles.electronNoDrag}`}
-					onClick={() => void handleLiveStreamButtonClick()}
-					disabled={liveSetupPreparing || (!selectedSource && !streaming)}
-					style={{ flex: "0 0 auto" }}
-					title={streaming ? "Stop live stream" : "Start live stream"}
-				>
-					<div className={`flex items-center justify-center ${streaming ? "gap-1.5" : ""}`}>
-						{streaming ? (
-							<FiX size={ICON_SIZE} className="text-emerald-300" />
-						) : (
-							<RadioTower
-								size={ICON_SIZE}
-								className={selectedSource ? "text-white/80" : "text-white/30"}
-							/>
-						)}
-						{streaming && (
-							<span className="inline-block w-[34px] text-left text-xs font-semibold tabular-nums text-emerald-300">
-								{formatTimePadded(streamElapsedSeconds)}
-							</span>
-						)}
-					</div>
-				</button>
+				{liveStreamStopLocked ? (
+					<Tooltip content="Stop will be available once stream is live." side="top">
+						<span
+							className={`inline-flex ${styles.electronNoDrag}`}
+							style={{ flex: "0 0 auto" }}
+							title="Stop will be available once stream is live."
+						>
+							{liveStreamButton}
+						</span>
+					</Tooltip>
+				) : (
+					liveStreamButton
+				)}
 
 				<div
 					className={`${trayLayout === "vertical" ? hudSidebarVerticalClasses : hudSidebarClasses} ${styles.electronNoDrag}`}

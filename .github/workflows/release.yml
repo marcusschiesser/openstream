@@ -139,6 +139,8 @@ jobs:
         run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENSTREAM_YOUTUBE_CLIENT_ID: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_ID }}
+          OPENSTREAM_YOUTUBE_CLIENT_SECRET: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_SECRET }}
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -174,6 +176,8 @@ jobs:
         run: npm run build:linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENSTREAM_YOUTUBE_CLIENT_ID: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_ID }}
+          OPENSTREAM_YOUTUBE_CLIENT_SECRET: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_SECRET }}
 
       - name: Upload Linux installers
         uses: actions/upload-artifact@v4
@@ -217,6 +221,9 @@ jobs:
 
       - name: Build Vite + Electron
         run: npx tsc && npx vite build
+        env:
+          OPENSTREAM_YOUTUBE_CLIENT_ID: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_ID }}
+          OPENSTREAM_YOUTUBE_CLIENT_SECRET: ${{ secrets.OPENSTREAM_YOUTUBE_CLIENT_SECRET }}
 
       - name: Package .app bundle
         run: npx electron-builder --mac --${{ matrix.arch }} --dir

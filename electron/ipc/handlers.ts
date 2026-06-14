@@ -2,7 +2,13 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { DesktopCapturerSource } from "electron";
-import { app, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
+import { app, clipboard, desktopCapturer, ipcMain, shell, systemPreferences } from "electron";
+import {
+	createYouTubeLiveStream,
+	getYouTubeAuthStatus,
+	getYouTubeBroadcastStatus,
+	startYouTubeAuth,
+} from "../youtubeLive";
 
 const FFMPEG_LIVE_STREAM_AUDIO_BITRATE = "160k";
 const FFMPEG_LIVE_STREAM_FPS = "30";
@@ -22,6 +28,10 @@ type StartLiveStreamInput = {
 	height: number;
 	videoBitrateKbps: number;
 };
+
+type IpcResult<T extends object = object> =
+	| ({ success: true } & T)
+	| { success: false; error: string };
 
 let selectedSource: SelectedSource | null = null;
 let selectedDesktopSource: DesktopCapturerSource | null = null;
@@ -72,6 +82,21 @@ function resolveFfmpegPath(): string | null {
 
 function isExpectedLiveStreamPipeError(error: NodeJS.ErrnoException): boolean {
 	return error.code === "EPIPE" || error.code === "ERR_STREAM_DESTROYED";
+}
+
+function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+async function runIpcTask<T extends object = object>(
+	task: () => Promise<T | void>,
+): Promise<IpcResult<T>> {
+	try {
+		const result = await task();
+		return { success: true, ...(result ?? {}) } as { success: true } & T;
+	} catch (error) {
+		return { success: false, error: getErrorMessage(error) };
+	}
 }
 
 function waitForLiveStreamExit(): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
@@ -303,16 +328,37 @@ export function registerIpcHandlers(getMainWindow: () => Electron.BrowserWindow 
 
 	ipcMain.handle("request-screen-access", async () => requestScreenAccess());
 
-	ipcMain.handle("open-external-url", async (_, url: string) => {
-		try {
+	ipcMain.handle("open-external-url", async (_, url: string) =>
+		runIpcTask(async () => {
 			await shell.openExternal(url);
-			return { success: true };
-		} catch (error) {
-			return { success: false, error: String(error) };
-		}
-	});
+		}),
+	);
+
+	ipcMain.handle("copy-to-clipboard", async (_, text: string) =>
+		runIpcTask(async () => {
+			clipboard.writeText(String(text ?? ""));
+		}),
+	);
 
 	ipcMain.handle("get-platform", () => process.platform);
+
+	ipcMain.handle("youtube-auth-status", () => getYouTubeAuthStatus());
+
+	ipcMain.handle("youtube-auth-start", async () =>
+		runIpcTask(async () => {
+			await startYouTubeAuth();
+		}),
+	);
+
+	ipcMain.handle("youtube-create-live-stream", async () =>
+		runIpcTask(async () => ({ liveStream: await createYouTubeLiveStream() })),
+	);
+
+	ipcMain.handle("youtube-get-broadcast-status", async (_, input: { broadcastId: string }) =>
+		runIpcTask(async () => {
+			return await getYouTubeBroadcastStatus(input);
+		}),
+	);
 
 	ipcMain.handle("start-live-stream", async (_, input: StartLiveStreamInput) => {
 		if (liveStreamProcess) {

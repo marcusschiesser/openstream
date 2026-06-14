@@ -8,6 +8,7 @@ OpenStream is a lightweight desktop livestreaming app for sending a selected scr
 
 - Pick a screen or window as the live source.
 - Stream to RTMP/RTMPS endpoints with a stream key.
+- Create and stream to unlisted YouTube Live broadcasts after Google sign-in.
 - Include system audio, microphone audio, and webcam video.
 - Choose 16:9, 9:16, or 1:1 output presets.
 - Arrange webcam layouts before going live.
@@ -19,6 +20,36 @@ OpenStream is a lightweight desktop livestreaming app for sending a selected scr
 npm install
 npm run dev
 ```
+
+### YouTube Live setup
+
+YouTube Live creation uses the YouTube Data API and Google OAuth for desktop apps. OpenStream
+requires a Google OAuth desktop client ID and client secret at build time. Users still sign in with
+their own Google account.
+
+For local development, set the values in your shell before starting the app:
+
+```sh
+export OPENSTREAM_YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
+export OPENSTREAM_YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
+npm run dev
+```
+
+Local production builds require the same variables:
+
+```sh
+export OPENSTREAM_YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
+export OPENSTREAM_YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
+npm run build
+```
+
+For GitHub Actions, store both values as repository secrets in
+`Settings -> Secrets and variables -> Actions -> Repository secrets`:
+
+- `OPENSTREAM_YOUTUBE_CLIENT_ID`
+- `OPENSTREAM_YOUTUBE_CLIENT_SECRET`
+
+The CI and release workflows pass these secrets to the build steps.
 
 ## Installation
 

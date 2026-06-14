@@ -55,8 +55,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openExternalUrl: (url: string) => {
 		return ipcRenderer.invoke("open-external-url", url);
 	},
+	copyToClipboard: (text: string) => {
+		return ipcRenderer.invoke("copy-to-clipboard", text);
+	},
 	getPlatform: () => {
 		return ipcRenderer.invoke("get-platform");
+	},
+	youtubeAuthStatus: () => {
+		return ipcRenderer.invoke("youtube-auth-status");
+	},
+	youtubeAuthStart: () => {
+		return ipcRenderer.invoke("youtube-auth-start");
+	},
+	youtubeCreateLiveStream: () => {
+		return ipcRenderer.invoke("youtube-create-live-stream");
+	},
+	youtubeGetBroadcastStatus: (input: { broadcastId: string }) => {
+		return ipcRenderer.invoke("youtube-get-broadcast-status", input);
 	},
 	startLiveStream: (input: {
 		destinationUrl: string;

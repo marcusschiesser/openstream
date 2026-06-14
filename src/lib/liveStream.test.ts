@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { computeCompositeLayout } from "./compositeLayout";
 import {
 	getLiveStreamVideoBitrateKbps,
+	getYouTubeWatchUrl,
 	joinRtmpsUrl,
+	joinYouTubeIngestionUrl,
 	validateLiveStreamDestination,
 } from "./liveStream";
 
@@ -19,22 +21,51 @@ describe("live stream helpers", () => {
 	it("validates RTMP destination input", () => {
 		expect(
 			validateLiveStreamDestination({
+				provider: "rtmp",
 				serverUrl: "rtmps://example.com/live",
 				streamKey: "abc123",
 			}),
 		).toBeNull();
 		expect(
 			validateLiveStreamDestination({
+				provider: "rtmp",
 				serverUrl: "rtmp://a.rtmp.youtube.com/live2",
 				streamKey: "abc123",
 			}),
 		).toBeNull();
 		expect(
-			validateLiveStreamDestination({ serverUrl: "https://example.com/live", streamKey: "x" }),
+			validateLiveStreamDestination({
+				provider: "rtmp",
+				serverUrl: "https://example.com/live",
+				streamKey: "x",
+			}),
 		).toMatchInlineSnapshot(`"Server URL must start with rtmp:// or rtmps://."`);
 		expect(
-			validateLiveStreamDestination({ serverUrl: "rtmps://example.com/live", streamKey: "" }),
+			validateLiveStreamDestination({
+				provider: "rtmp",
+				serverUrl: "rtmps://example.com/live",
+				streamKey: "",
+			}),
 		).toMatchInlineSnapshot(`"Enter a stream key."`);
+	});
+
+	it("validates YouTube destination input", () => {
+		expect(
+			validateLiveStreamDestination({ provider: "youtube", isAuthenticated: true }),
+		).toBeNull();
+		expect(
+			validateLiveStreamDestination({ provider: "youtube", isAuthenticated: false }),
+		).toMatchInlineSnapshot(`"Sign in with Google to stream to YouTube Live."`);
+	});
+
+	it("builds YouTube ingestion and watch URLs", () => {
+		expect(joinYouTubeIngestionUrl("rtmps://a.rtmps.youtube.com/live2/", "stream-name")).toBe(
+			"rtmps://a.rtmps.youtube.com/live2/stream-name",
+		);
+		expect(joinYouTubeIngestionUrl("rtmp://a.rtmp.youtube.com/live2/", "stream-name")).toBe(
+			"rtmp://a.rtmp.youtube.com/live2/stream-name",
+		);
+		expect(getYouTubeWatchUrl("abc123")).toBe("https://www.youtube.com/watch?v=abc123");
 	});
 
 	it("selects live bitrate from native source dimensions", () => {

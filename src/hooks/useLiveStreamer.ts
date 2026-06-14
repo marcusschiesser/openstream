@@ -18,6 +18,15 @@ const AUDIO_BITRATE = 160_000;
 const LIVE_AUDIO_SAMPLE_RATE = 48_000;
 const LIVE_AUDIO_WARMUP_MS = 50;
 const MIC_GAIN_BOOST = 1.4;
+const YOUTUBE_BROADCAST_STATUS_POLL_MS = 2500;
+const YOUTUBE_BROADCAST_LIVE_POLL_ATTEMPTS = 120;
+
+type ProviderLiveStatus = {
+	status: string | null;
+	timerStarted: boolean;
+	stopAllowed: boolean;
+	startedAt: number | null;
+};
 
 type LiveStreamerDeviceConfig = {
 	systemAudioEnabled: boolean;
@@ -25,6 +34,8 @@ type LiveStreamerDeviceConfig = {
 	microphoneDeviceId?: string;
 	webcamEnabled: boolean;
 	webcamDeviceId?: string;
+	onProviderWatchUrl?: (watchUrl: string) => void;
+	onProviderStatus?: (status: ProviderLiveStatus) => void;
 };
 
 type ActiveLiveStream = {
@@ -39,8 +50,18 @@ type ActiveLiveStream = {
 	webcamVideo: HTMLVideoElement | null;
 };
 
+type YouTubeLiveStreamMetadata = {
+	broadcastId: string;
+	streamId: string;
+	watchUrl: string;
+	ingestionUrl: string;
+};
+
 export type UseLiveStreamerReturn = {
 	streaming: boolean;
+	providerTimerStarted: boolean;
+	providerStopAllowed: boolean;
+	providerStatus: string | null;
 	streamElapsedSeconds: number;
 	startLiveStream: (config: LiveStreamStartConfig) => Promise<boolean>;
 	stopLiveStream: () => Promise<void>;
@@ -142,6 +163,9 @@ async function createVideoElement(stream: MediaStream): Promise<HTMLVideoElement
 
 export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLiveStreamerReturn {
 	const [streaming, setStreaming] = useState(false);
+	const [providerTimerStarted, setProviderTimerStarted] = useState(false);
+	const [providerStopAllowed, setProviderStopAllowed] = useState(false);
+	const [providerStatus, setProviderStatus] = useState<string | null>(null);
 	const [streamElapsedSeconds, setStreamElapsedSeconds] = useState(0);
 	const activeStream = useRef<ActiveLiveStream | null>(null);
 	const startedAt = useRef<number | null>(null);
@@ -187,11 +211,99 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 			}
 		} finally {
 			startedAt.current = null;
+			setProviderTimerStarted(false);
+			setProviderStopAllowed(false);
+			setProviderStatus(null);
 			setStreaming(false);
 			setStreamElapsedSeconds(0);
 			stopping.current = false;
 		}
 	}, [cleanupActiveStream]);
+
+	const publishProviderStatus = useCallback(
+		(status: ProviderLiveStatus) => {
+			setProviderStatus(status.status);
+			setProviderTimerStarted(status.timerStarted);
+			setProviderStopAllowed(status.stopAllowed);
+			if (status.startedAt !== null) {
+				startedAt.current = status.startedAt;
+				setStreamElapsedSeconds(Math.max(0, Math.floor((Date.now() - status.startedAt) / 1000)));
+			}
+			deviceConfig.onProviderStatus?.(status);
+		},
+		[deviceConfig.onProviderStatus],
+	);
+
+	const waitForYouTubeLiveStatus = useCallback(
+		async (liveStream: YouTubeLiveStreamMetadata) => {
+			const stopAfterYouTubeStatusError = async (message: string) => {
+				if (stopping.current) {
+					return;
+				}
+				toast.error(message);
+				try {
+					await stopLiveStream();
+				} catch (error) {
+					console.warn("Failed to stop live stream after YouTube status error:", error);
+				}
+			};
+
+			try {
+				let timerStarted = false;
+				let timerStartedAt: number | null = null;
+				let lastStatus: string | null = null;
+				for (let attempt = 0; attempt < YOUTUBE_BROADCAST_LIVE_POLL_ATTEMPTS; attempt += 1) {
+					if (stopping.current) {
+						return;
+					}
+					const result = await window.electronAPI.youtubeGetBroadcastStatus({
+						broadcastId: liveStream.broadcastId,
+					});
+					if (!result.success) {
+						await stopAfterYouTubeStatusError(
+							result.error ?? "Unable to check YouTube broadcast status.",
+						);
+						return;
+					}
+
+					const lifeCycleStatus = result.lifeCycleStatus;
+					const readyOrLater =
+						lifeCycleStatus === "ready" ||
+						lifeCycleStatus === "liveStarting" ||
+						lifeCycleStatus === "live";
+					if (readyOrLater && !timerStarted) {
+						timerStarted = true;
+						timerStartedAt = Date.now();
+					}
+
+					if (lifeCycleStatus !== lastStatus) {
+						lastStatus = lifeCycleStatus;
+						publishProviderStatus({
+							status: lifeCycleStatus,
+							timerStarted,
+							stopAllowed: lifeCycleStatus === "live",
+							startedAt: timerStartedAt,
+						});
+						timerStartedAt = null;
+					}
+
+					if (lifeCycleStatus === "live") {
+						return;
+					}
+					await new Promise((resolve) =>
+						window.setTimeout(resolve, YOUTUBE_BROADCAST_STATUS_POLL_MS),
+					);
+				}
+
+				await stopAfterYouTubeStatusError("YouTube did not report the broadcast as live in time.");
+			} catch (error) {
+				await stopAfterYouTubeStatusError(
+					error instanceof Error ? error.message : "Unable to check YouTube broadcast status.",
+				);
+			}
+		},
+		[publishProviderStatus, stopLiveStream],
+	);
 
 	const captureScreenStream = useCallback(async () => {
 		const selectedSource = await window.electronAPI.getSelectedSource();
@@ -346,7 +458,7 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 				return false;
 			}
 
-			const validationError = validateLiveStreamDestination(config);
+			const validationError = validateLiveStreamDestination(config.destination);
 			if (validationError) {
 				toast.error(validationError);
 				return false;
@@ -385,7 +497,19 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 					height: screenVideo.videoHeight || screenSettings.height || TARGET_HEIGHT,
 				};
 				const videoBitrateKbps = getLiveStreamVideoBitrateKbps(screenSize);
-				const destinationUrl = joinRtmpsUrl(config.serverUrl, config.streamKey);
+				let youtubeLiveStream: YouTubeLiveStreamMetadata | null = null;
+				let destinationUrl: string;
+				if (config.destination.provider === "youtube") {
+					const result = await window.electronAPI.youtubeCreateLiveStream();
+					if (!result.success || !result.liveStream) {
+						throw new Error(result.error ?? "Failed to create YouTube live stream.");
+					}
+					youtubeLiveStream = result.liveStream;
+					deviceConfig.onProviderWatchUrl?.(result.liveStream.watchUrl);
+					destinationUrl = result.liveStream.ingestionUrl;
+				} else {
+					destinationUrl = joinRtmpsUrl(config.destination.serverUrl, config.destination.streamKey);
+				}
 				const startResult = await window.electronAPI.startLiveStream({
 					destinationUrl,
 					width: screenSize.width,
@@ -533,8 +657,18 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 
 				await new Promise((resolve) => window.setTimeout(resolve, LIVE_AUDIO_WARMUP_MS));
 				recorder.start(LIVE_STREAM_TIMESLICE_MS);
-				startedAt.current = Date.now();
-				setStreamElapsedSeconds(0);
+				if (youtubeLiveStream) {
+					void waitForYouTubeLiveStatus(youtubeLiveStream);
+				} else {
+					const providerStartedAt = Date.now();
+					setStreamElapsedSeconds(0);
+					publishProviderStatus({
+						status: null,
+						timerStarted: true,
+						stopAllowed: true,
+						startedAt: providerStartedAt,
+					});
+				}
 				setStreaming(true);
 				return true;
 			} catch (error) {
@@ -546,6 +680,9 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 				mixingContext?.close().catch(() => undefined);
 				await window.electronAPI.stopLiveStream();
 				startedAt.current = null;
+				setProviderTimerStarted(false);
+				setProviderStopAllowed(false);
+				setProviderStatus(null);
 				setStreaming(false);
 				setStreamElapsedSeconds(0);
 				return false;
@@ -556,13 +693,16 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 			captureMicrophoneStream,
 			captureScreenStream,
 			captureWebcamStream,
+			deviceConfig.onProviderWatchUrl,
+			publishProviderStatus,
 			stopLiveStream,
 			streaming,
+			waitForYouTubeLiveStatus,
 		],
 	);
 
 	useEffect(() => {
-		if (!streaming) {
+		if (!streaming || !providerTimerStarted) {
 			return;
 		}
 
@@ -573,7 +713,7 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 		}, 250);
 
 		return () => window.clearInterval(interval);
-	}, [streaming]);
+	}, [providerTimerStarted, streaming]);
 
 	useEffect(() => {
 		return () => {
@@ -584,6 +724,9 @@ export function useLiveStreamer(deviceConfig: LiveStreamerDeviceConfig): UseLive
 
 	return {
 		streaming,
+		providerTimerStarted,
+		providerStopAllowed,
+		providerStatus,
 		streamElapsedSeconds,
 		startLiveStream,
 		stopLiveStream,
