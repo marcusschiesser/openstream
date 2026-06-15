@@ -1,3 +1,4 @@
+import { MdVideocam } from "react-icons/md";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useHudPillExpansion } from "../../hooks/useHudPillExpansion";
 import type { WebcamMaskShape } from "../../lib/liveLayoutTypes";
@@ -44,6 +45,7 @@ export function WebcamPill({
 
 	return (
 		<HudControlPill controller={controller} size="webcam">
+			<MdVideocam size={16} className="shrink-0 text-white/70" />
 			{!controller.expanded && (
 				<div className="min-w-0 flex-1 truncate text-[10px] font-medium text-white/60">
 					{webcam.selectedLabel}

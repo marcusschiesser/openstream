@@ -1,3 +1,4 @@
+import { MdMic } from "react-icons/md";
 import { useHudPillExpansion } from "../../hooks/useHudPillExpansion";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { HudControlPill } from "./HudControlPill";
@@ -28,6 +29,7 @@ export function MicPill({ microphone, onExpandedChange, onRequestInteraction }: 
 
 	return (
 		<HudControlPill controller={controller} size="mic">
+			<MdMic size={16} className="shrink-0 text-white/70" />
 			<div className="relative flex-1 min-w-0">
 				{!controller.expanded && (
 					<div className="truncate text-[10px] font-medium text-white/60">
