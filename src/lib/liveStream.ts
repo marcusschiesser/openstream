@@ -17,6 +17,7 @@ export interface RtmpLiveStreamDestinationInput {
 
 export interface YouTubeLiveStreamDestinationInput {
 	provider: "youtube";
+	isConfigured: boolean;
 	isAuthenticated: boolean;
 }
 
@@ -57,6 +58,9 @@ export function getYouTubeWatchUrl(broadcastId: string): string {
 
 export function validateLiveStreamDestination(input: LiveStreamDestinationInput): string | null {
 	if (input.provider === "youtube") {
+		if (!input.isConfigured) {
+			return "YouTube Live sign-in is not configured.";
+		}
 		return input.isAuthenticated ? null : "Sign in with Google to stream to YouTube Live.";
 	}
 

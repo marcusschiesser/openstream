@@ -15,6 +15,7 @@ type RtmpDestinationState = {
 };
 
 type YouTubeDestinationState = {
+	configured: boolean;
 	authenticated: boolean;
 	authLoading: boolean;
 	creatingStream: boolean;
@@ -43,11 +44,14 @@ function getYouTubeLabels(youtube: YouTubeDestinationState, isStreaming: boolean
 		youtube.watchUrl && !isStreaming ? `Last stream: ${youtube.watchUrl}` : youtube.watchUrl;
 	const statusLabel = youtube.status ? `YouTube: ${youtube.status}` : null;
 	const pendingLabel = "Waiting for YouTube to be ready...";
-	const readOnlyLabel = youtube.creatingStream
-		? pendingLabel
-		: (statusLabel ?? urlLabel ?? "YouTube Live");
+	const notConfiguredLabel = "YouTube not configured";
+	const readOnlyLabel = !youtube.configured
+		? notConfiguredLabel
+		: youtube.creatingStream
+			? pendingLabel
+			: (statusLabel ?? urlLabel ?? "YouTube Live");
 
-	return { pendingLabel, readOnlyLabel, statusLabel, urlLabel };
+	return { notConfiguredLabel, pendingLabel, readOnlyLabel, statusLabel, urlLabel };
 }
 
 function RtmpDestinationControls({
@@ -99,11 +103,21 @@ function YouTubeDestinationControls({
 	onCopyUrl: () => void;
 	isStreaming: boolean;
 }) {
-	const { pendingLabel, statusLabel, urlLabel } = getYouTubeLabels(youtube, isStreaming);
+	const { notConfiguredLabel, pendingLabel, statusLabel, urlLabel } = getYouTubeLabels(
+		youtube,
+		isStreaming,
+	);
 
 	return (
 		<div className="flex min-w-0 items-center gap-2">
-			{youtube.authenticated ? (
+			{!youtube.configured ? (
+				<div
+					className="flex h-7 shrink-0 items-center px-1 text-[11px] font-medium text-white/40"
+					role="status"
+				>
+					{notConfiguredLabel}
+				</div>
+			) : youtube.authenticated ? (
 				<div className="min-w-0 flex-1 text-[11px] text-white/70">
 					<div className="truncate">
 						{statusLabel ??

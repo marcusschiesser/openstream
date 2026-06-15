@@ -120,8 +120,34 @@ describe("useLiveDestination", () => {
 		});
 		expect(result.current.activeDestination).toEqual({
 			provider: "youtube",
+			isConfigured: true,
 			isAuthenticated: true,
 		});
+	});
+
+	it("treats stored YouTube tokens as unauthenticated when OAuth is not configured", async () => {
+		window.electronAPI = {
+			...window.electronAPI,
+			youtubeAuthStatus: async () => ({ configured: false, authenticated: true }),
+		} as typeof window.electronAPI;
+		const { result } = renderHook(() => useLiveDestination());
+
+		await act(async () => {
+			result.current.setProvider("youtube");
+			await Promise.resolve();
+		});
+
+		expect(result.current.youtube.configured).toBe(false);
+		expect(result.current.youtube.authenticated).toBe(false);
+		expect(result.current.activeDestination).toEqual({
+			provider: "youtube",
+			isConfigured: false,
+			isAuthenticated: false,
+		});
+		await act(async () => {
+			expect(result.current.validate()).toBe(false);
+		});
+		expect(result.current.error).toBe("YouTube Live sign-in is not configured.");
 	});
 
 	it("prepares and cleans up a YouTube destination", async () => {
@@ -146,6 +172,7 @@ describe("useLiveDestination", () => {
 
 		expect(preparedDestination).toEqual({
 			provider: "youtube",
+			isConfigured: true,
 			isAuthenticated: true,
 		});
 		expect(result.current.youtube.creatingStream).toBe(true);

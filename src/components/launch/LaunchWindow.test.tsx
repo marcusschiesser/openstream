@@ -116,11 +116,11 @@ async function flushPromises(times = 3) {
 	}
 }
 
-function selectYouTubeDestination() {
+async function selectYouTubeDestination() {
 	const providerSelect = screen.getByLabelText("Destination provider");
 	expect(providerSelect).toBeInTheDocument();
 	fireEvent.change(providerSelect, { target: { value: "youtube" } });
-	const collapsedYouTubeDestination = screen.getByText("YouTube Live");
+	const collapsedYouTubeDestination = await screen.findByText("YouTube Live");
 	fireEvent.pointerMove(collapsedYouTubeDestination, { movementX: 1, movementY: 0 });
 }
 
@@ -499,7 +499,7 @@ describe("LaunchWindow screen selection", () => {
 		await screen.findByText("Screen 1");
 		const readOnlyDestination = screen.getByText("rtmp://a.rtmp.youtube.com/live2");
 		fireEvent.pointerMove(readOnlyDestination);
-		selectYouTubeDestination();
+		await selectYouTubeDestination();
 		expect(await screen.findByText("Sign in with Google")).toBeInTheDocument();
 
 		fireEvent.click(screen.getByText("Sign in with Google"));
@@ -508,6 +508,36 @@ describe("LaunchWindow screen selection", () => {
 			expect(window.electronAPI.youtubeAuthStart).toHaveBeenCalled();
 		});
 		expect(await screen.findByText("Signed in with Google")).toBeInTheDocument();
+	});
+
+	it("shows YouTube as not configured without a sign-in button when OAuth is missing", async () => {
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+		vi.mocked(window.electronAPI.youtubeAuthStatus).mockResolvedValue({
+			configured: false,
+			authenticated: true,
+		});
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
+		const providerSelect = screen.getByLabelText("Destination provider");
+		fireEvent.change(providerSelect, { target: { value: "youtube" } });
+		const collapsedYouTubeDestination = await screen.findByText("YouTube not configured");
+		fireEvent.pointerMove(collapsedYouTubeDestination, { movementX: 1, movementY: 0 });
+
+		expect(screen.getByRole("status")).toHaveTextContent("YouTube not configured");
+		expect(
+			screen.queryByRole("button", { name: "YouTube not configured" }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText("Sign in with Google")).not.toBeInTheDocument();
+		expect(screen.queryByText("Signed in with Google")).not.toBeInTheDocument();
 	});
 
 	it("keeps the YouTube live URL visible while streaming", async () => {
@@ -523,7 +553,7 @@ describe("LaunchWindow screen selection", () => {
 
 		await screen.findByText("Screen 1");
 		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
-		selectYouTubeDestination();
+		await selectYouTubeDestination();
 		fireEvent.click(await screen.findByText("Sign in with Google"));
 		await screen.findByText("Signed in with Google");
 
@@ -589,7 +619,7 @@ describe("LaunchWindow screen selection", () => {
 
 		await screen.findByText("Screen 1");
 		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
-		selectYouTubeDestination();
+		await selectYouTubeDestination();
 		fireEvent.click(await screen.findByText("Sign in with Google"));
 		await screen.findByText("Signed in with Google");
 

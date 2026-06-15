@@ -51,11 +51,26 @@ describe("live stream helpers", () => {
 
 	it("validates YouTube destination input", () => {
 		expect(
-			validateLiveStreamDestination({ provider: "youtube", isAuthenticated: true }),
+			validateLiveStreamDestination({
+				provider: "youtube",
+				isConfigured: true,
+				isAuthenticated: true,
+			}),
 		).toBeNull();
 		expect(
-			validateLiveStreamDestination({ provider: "youtube", isAuthenticated: false }),
+			validateLiveStreamDestination({
+				provider: "youtube",
+				isConfigured: true,
+				isAuthenticated: false,
+			}),
 		).toMatchInlineSnapshot(`"Sign in with Google to stream to YouTube Live."`);
+		expect(
+			validateLiveStreamDestination({
+				provider: "youtube",
+				isConfigured: false,
+				isAuthenticated: true,
+			}),
+		).toMatchInlineSnapshot(`"YouTube Live sign-in is not configured."`);
 	});
 
 	it("builds YouTube ingestion and watch URLs", () => {

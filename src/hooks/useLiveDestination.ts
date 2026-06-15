@@ -54,6 +54,7 @@ function useRtmpDestinationState(setError: SetDestinationError) {
 }
 
 function useYouTubeDestinationState(setError: SetDestinationError) {
+	const [youtubeConfigured, setYoutubeConfigured] = useState(false);
 	const [youtubeAuthenticated, setYoutubeAuthenticated] = useState(false);
 	const [youtubeAuthLoading, setYoutubeAuthLoading] = useState(false);
 	const [youtubeCreatingStream, setYoutubeCreatingStream] = useState(false);
@@ -61,19 +62,27 @@ function useYouTubeDestinationState(setError: SetDestinationError) {
 	const [youtubeStatus, setYoutubeStatus] = useState<string | null>(null);
 
 	const destination = useMemo(
-		() => ({ provider: "youtube" as const, isAuthenticated: youtubeAuthenticated }),
-		[youtubeAuthenticated],
+		() => ({
+			provider: "youtube" as const,
+			isConfigured: youtubeConfigured,
+			isAuthenticated: youtubeAuthenticated,
+		}),
+		[youtubeAuthenticated, youtubeConfigured],
 	);
 
 	const refreshYouTubeAuthStatus = useCallback(async () => {
 		try {
 			const status = await window.electronAPI?.youtubeAuthStatus?.();
-			setYoutubeAuthenticated(Boolean(status?.authenticated));
-			return Boolean(status?.authenticated);
+			const configured = Boolean(status?.configured);
+			const authenticated = configured && Boolean(status?.authenticated);
+			setYoutubeConfigured(configured);
+			setYoutubeAuthenticated(authenticated);
+			return { authenticated, configured };
 		} catch (authError) {
+			setYoutubeConfigured(false);
 			setYoutubeAuthenticated(false);
 			setError(authError instanceof Error ? authError.message : "Unable to check YouTube sign-in.");
-			return false;
+			return { authenticated: false, configured: false };
 		}
 	}, [setError]);
 
@@ -81,6 +90,14 @@ function useYouTubeDestinationState(setError: SetDestinationError) {
 		setYoutubeAuthLoading(true);
 		setError(null);
 		try {
+			const status = await window.electronAPI?.youtubeAuthStatus?.();
+			if (!status?.configured) {
+				setYoutubeConfigured(false);
+				setYoutubeAuthenticated(false);
+				setError("YouTube Live sign-in is not configured.");
+				return false;
+			}
+			setYoutubeConfigured(true);
 			const result = await window.electronAPI?.youtubeAuthStart?.();
 			if (!result?.success) {
 				const nextError = result?.error ?? "Unable to sign in with Google.";
@@ -88,6 +105,7 @@ function useYouTubeDestinationState(setError: SetDestinationError) {
 				setYoutubeAuthenticated(false);
 				return false;
 			}
+			setYoutubeConfigured(true);
 			setYoutubeAuthenticated(true);
 			return true;
 		} catch (authError) {
@@ -115,6 +133,7 @@ function useYouTubeDestinationState(setError: SetDestinationError) {
 
 	return {
 		destination,
+		configured: youtubeConfigured,
 		authenticated: youtubeAuthenticated,
 		authLoading: youtubeAuthLoading,
 		creatingStream: youtubeCreatingStream,
@@ -166,8 +185,12 @@ export function useLiveDestination() {
 	const prepareStart = useCallback(async () => {
 		let nextDestination = activeDestination;
 		if (provider === "youtube") {
-			const authenticated = await youtube.refreshAuthStatus();
-			nextDestination = { provider: "youtube", isAuthenticated: authenticated };
+			const { authenticated, configured } = await youtube.refreshAuthStatus();
+			nextDestination = {
+				provider: "youtube",
+				isConfigured: configured,
+				isAuthenticated: authenticated,
+			};
 		}
 
 		const validationError = validateLiveStreamDestination(nextDestination);
