@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Ocultar HUD",
-		"closeApp": "Fechar App",
-		"useHorizontalTray": "Use horizontal tray",
-		"useVerticalTray": "Use vertical tray"
+		"closeApp": "Fechar App"
 	},
 	"audio": {
 		"enableSystemAudio": "Ativar áudio do sistema",

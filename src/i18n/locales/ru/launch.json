@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Скрыть HUD",
-		"closeApp": "Закрыть приложение",
-		"useVerticalTray": "Использовать вертикальную панель",
-		"useHorizontalTray": "Использовать горизонтальную панель"
+		"closeApp": "Закрыть приложение"
 	},
 	"audio": {
 		"enableSystemAudio": "Включить системное аудио",

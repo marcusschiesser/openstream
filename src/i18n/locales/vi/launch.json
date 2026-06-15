@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Ẩn HUD",
-		"closeApp": "Đóng ứng dụng",
-		"useVerticalTray": "Dùng khay dọc",
-		"useHorizontalTray": "Dùng khay ngang"
+		"closeApp": "Đóng ứng dụng"
 	},
 	"audio": {
 		"enableSystemAudio": "Bật âm thanh hệ thống",

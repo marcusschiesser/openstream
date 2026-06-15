@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "HUDを隠す",
-		"closeApp": "アプリを閉じる",
-		"useVerticalTray": "縦型トレイを使用",
-		"useHorizontalTray": "横型トレイを使用"
+		"closeApp": "アプリを閉じる"
 	},
 	"audio": {
 		"enableSystemAudio": "システム音声を有効にする",

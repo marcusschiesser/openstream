@@ -47,8 +47,6 @@ vi.mock("@/contexts/I18nContext", () => ({
 			"webcam.searching": "Searching",
 			"webcam.unavailable": "Unavailable",
 			"webcam.noneFound": "No cameras",
-			"tooltips.useVerticalTray": "Use vertical tray",
-			"tooltips.useHorizontalTray": "Use horizontal tray",
 			"tooltips.hideHUD": "Hide HUD",
 			"tooltips.closeApp": "Close app",
 			language: "Language",

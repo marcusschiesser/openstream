@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "Kontrol panelini gizle",
-		"closeApp": "Uygulamayı kapat",
-		"useVerticalTray": "Dikey araç çubuğunu kullan",
-		"useHorizontalTray": "Yatay araç çubuğunu kullan"
+		"closeApp": "Uygulamayı kapat"
 	},
 	"audio": {
 		"enableSystemAudio": "Sistem sesini etkinleştir",

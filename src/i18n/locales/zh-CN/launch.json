@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "隐藏控制面板",
-		"closeApp": "关闭应用",
-		"useVerticalTray": "使用竖向托盘",
-		"useHorizontalTray": "使用横向托盘"
+		"closeApp": "关闭应用"
 	},
 	"audio": {
 		"enableSystemAudio": "启用系统音频",

@@ -1,9 +1,7 @@
 {
 	"tooltips": {
 		"hideHUD": "إخفاء واجهة العرض",
-		"closeApp": "إغلاق التطبيق",
-		"useVerticalTray": "استخدام الشريط العمودي",
-		"useHorizontalTray": "استخدام الشريط الأفقي"
+		"closeApp": "إغلاق التطبيق"
 	},
 	"audio": {
 		"enableSystemAudio": "تفعيل صوت النظام",
