@@ -58,6 +58,7 @@ interface Window {
 		stopLiveStream: () => Promise<{ success: boolean; error?: string }>;
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
+		onHudOverlayRestored: (callback: () => void) => () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;
 		moveHudOverlayBy: (deltaX: number, deltaY: number) => void;
 		/** HUD -> main: show, update, or hide the separate screen-bound webcam preview window. */

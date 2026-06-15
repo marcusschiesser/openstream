@@ -13,7 +13,11 @@ import {
 import { registerOpenAppShortcut, unregisterAllGlobalShortcuts } from "./globalShortcut";
 import { mainT, setMainLocale } from "./i18n";
 import { getSelectedDesktopSource, registerIpcHandlers } from "./ipc/handlers";
-import { createHudOverlayWindow } from "./windows";
+import {
+	createHudOverlayWindow,
+	isHudOverlayHiddenToTray,
+	showHudOverlayFromTray,
+} from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,12 +52,9 @@ function createWindow() {
 }
 
 function showMainWindow() {
-	if (mainWindow && !mainWindow.isDestroyed()) {
-		if (mainWindow.isMinimized()) {
-			mainWindow.restore();
-		}
-		mainWindow.show();
-		mainWindow.focus();
+	const shownWindow = showHudOverlayFromTray();
+	if (shownWindow) {
+		mainWindow = shownWindow;
 		return;
 	}
 	createWindow();
@@ -148,6 +149,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
+	if (isHudOverlayHiddenToTray()) {
+		return;
+	}
 	const hasVisibleWindow = BrowserWindow.getAllWindows().some(
 		(window) => !window.isDestroyed() && window.isVisible(),
 	);

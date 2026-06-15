@@ -17,6 +17,7 @@ const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}$
 let hudOverlayWindow: BrowserWindow | null = null;
 let webcamPreviewWindow: BrowserWindow | null = null;
 let webcamPreviewState: WebcamPreviewState | null = null;
+let hudOverlayHiddenToTray = false;
 
 const HUD_COMPACT_WIDTH = 600;
 const HUD_COMPACT_HEIGHT = 160;
@@ -62,11 +63,7 @@ function getSourceOverlayBounds(source: SelectedPreviewSource): Electron.Rectang
 	return fallbackDisplay.workArea;
 }
 
-ipcMain.on("hud-overlay-hide", () => {
-	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayWindow.minimize();
-	}
-});
+ipcMain.on("hud-overlay-hide", () => hideHudOverlayToTray());
 
 ipcMain.on("hud-overlay-ignore-mouse-events", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
@@ -110,6 +107,12 @@ function sendWebcamPreviewStateToHud() {
 	}
 }
 
+function sendHudOverlayRestored() {
+	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		hudOverlayWindow.webContents.send("hud-overlay-restored");
+	}
+}
+
 function hideWebcamPreviewWindow() {
 	if (webcamPreviewWindow && !webcamPreviewWindow.isDestroyed()) {
 		webcamPreviewWindow.hide();
@@ -118,6 +121,12 @@ function hideWebcamPreviewWindow() {
 }
 
 function applyWebcamPreviewWindowState() {
+	if (hudOverlayHiddenToTray) {
+		hideWebcamPreviewWindow();
+		sendWebcamPreviewStateToPreview();
+		return;
+	}
+
 	if (!webcamPreviewState?.enabled || !webcamPreviewState.source) {
 		hideWebcamPreviewWindow();
 		sendWebcamPreviewStateToPreview();
@@ -200,7 +209,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	}
 
 	win.once("ready-to-show", () => {
-		if (!HEADLESS) win.show();
+		if (!HEADLESS && !hudOverlayHiddenToTray) win.show();
 	});
 
 	hudOverlayWindow = win;
@@ -219,6 +228,33 @@ export function createHudOverlayWindow(): BrowserWindow {
 	}
 
 	return win;
+}
+
+export function hideHudOverlayToTray() {
+	hudOverlayHiddenToTray = true;
+	hideWebcamPreviewWindow();
+	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		hudOverlayWindow.hide();
+	}
+}
+
+export function isHudOverlayHiddenToTray(): boolean {
+	return hudOverlayHiddenToTray;
+}
+
+export function showHudOverlayFromTray(): BrowserWindow | null {
+	hudOverlayHiddenToTray = false;
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
+		return null;
+	}
+	if (hudOverlayWindow.isMinimized()) {
+		hudOverlayWindow.restore();
+	}
+	hudOverlayWindow.show();
+	hudOverlayWindow.focus();
+	sendHudOverlayRestored();
+	applyWebcamPreviewWindowState();
+	return hudOverlayWindow;
 }
 
 export function createWebcamPreviewWindow(): BrowserWindow {
@@ -259,7 +295,9 @@ export function createWebcamPreviewWindow(): BrowserWindow {
 	}
 
 	win.once("ready-to-show", () => {
-		if (webcamPreviewState?.enabled && !HEADLESS) win.showInactive();
+		if (webcamPreviewState?.enabled && !HEADLESS && !hudOverlayHiddenToTray) {
+			win.showInactive();
+		}
 		sendWebcamPreviewStateToPreview();
 	});
 

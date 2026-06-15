@@ -194,13 +194,10 @@ export function registerIpcHandlers(getMainWindow: () => Electron.BrowserWindow 
 
 			if (status === "not-determined") {
 				const mainWin = getMainWindow();
-				if (mainWin && !mainWin.isDestroyed()) {
-					if (!mainWin.isVisible()) {
-						mainWin.show();
-					}
+				if (mainWin && !mainWin.isDestroyed() && mainWin.isVisible() && !mainWin.isMinimized()) {
 					mainWin.focus();
+					app.focus({ steal: true });
 				}
-				app.focus({ steal: true });
 				desktopCapturer
 					.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
 					.catch(() => undefined);

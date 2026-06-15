@@ -44,7 +44,8 @@ const hudIconBtnClasses =
 	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer text-white hover:bg-white/10 active:scale-95 disabled:cursor-not-allowed disabled:opacity-35";
 
 const windowBtnClasses =
-	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50 hover:opacity-90 hover:bg-white/[0.08]";
+	"flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer opacity-50";
+const windowBtnHoverClasses = "hover:opacity-90 hover:bg-white/[0.08]";
 
 const hudSidebarClasses = "ml-0.5 pl-1.5 border-l border-white/10 flex items-center gap-0.5";
 const WEBCAM_SHAPE_OPTIONS: Array<{ value: WebcamMaskShape; label: string }> = [
@@ -129,6 +130,7 @@ export function LaunchWindow() {
 	const [destinationExpanded, setDestinationExpanded] = useState(false);
 	const [micExpanded, setMicExpanded] = useState(false);
 	const [webcamExpanded, setWebcamExpanded] = useState(false);
+	const [suppressRestoredWindowButtonHover, setSuppressRestoredWindowButtonHover] = useState(false);
 	const anyHudControlExpanded = destinationExpanded || micExpanded || webcamExpanded;
 	const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -285,6 +287,13 @@ export function LaunchWindow() {
 		return () => {
 			window.electronAPI?.setWebcamPreviewState?.(null);
 		};
+	}, []);
+
+	useEffect(() => {
+		return window.electronAPI?.onHudOverlayRestored?.(() => {
+			setSuppressRestoredWindowButtonHover(true);
+			document.activeElement instanceof HTMLElement && document.activeElement.blur();
+		});
 	}, []);
 
 	useEffect(() => {
@@ -488,6 +497,12 @@ export function LaunchWindow() {
 	const handleHudPointerMove = (
 		event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
 	) => {
+		if (
+			suppressRestoredWindowButtonHover &&
+			(event.nativeEvent.movementX !== 0 || event.nativeEvent.movementY !== 0)
+		) {
+			setSuppressRestoredWindowButtonHover(false);
+		}
 		const target = event.target as HTMLElement | null;
 		setHudMouseEventsEnabled(
 			isLanguageMenuOpen || Boolean(target?.closest("[data-hud-interactive='true']")),
@@ -811,14 +826,18 @@ export function LaunchWindow() {
 
 					<div className="flex items-center gap-0.5">
 						<button
-							className={windowBtnClasses}
+							className={`${windowBtnClasses} ${
+								suppressRestoredWindowButtonHover ? "" : windowBtnHoverClasses
+							}`}
 							title={t("tooltips.hideHUD")}
 							onClick={() => window.electronAPI?.hudOverlayHide?.()}
 						>
 							<FiMinus size={ICON_SIZE} className="text-white" />
 						</button>
 						<button
-							className={windowBtnClasses}
+							className={`${windowBtnClasses} ${
+								suppressRestoredWindowButtonHover ? "" : windowBtnHoverClasses
+							}`}
 							title={t("tooltips.closeApp")}
 							onClick={() => window.electronAPI?.hudOverlayClose?.()}
 						>
