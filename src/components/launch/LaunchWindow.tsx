@@ -685,7 +685,7 @@ export function LaunchWindow() {
 								value={selectedSource?.id ?? ""}
 								disabled={streaming}
 								onChange={(event) => void selectScreenSource(event.target.value)}
-								className="max-w-[120px] appearance-none rounded-md border-0 bg-transparent py-1 pl-1 pr-6 text-[11px] font-medium text-white outline-none hover:text-white/90 focus-visible:ring-1 focus-visible:ring-white/20 disabled:opacity-45"
+								className="max-w-[120px] appearance-none rounded-md border-0 bg-transparent py-1 pl-1 pr-6 text-[11px] font-medium text-white outline-none hover:text-white/90 disabled:opacity-45"
 							>
 								{screenSources.map((source, index) => (
 									<option key={source.id} value={source.id} className="bg-[#1c1c24]">
