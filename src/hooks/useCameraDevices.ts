@@ -6,9 +6,9 @@ export interface CameraDevice {
 	groupId: string;
 }
 
-export function useCameraDevices(enabled: boolean = false) {
+export function useCameraDevices(enabled: boolean = false, initialDeviceId: string = "") {
 	const [devices, setDevices] = useState<CameraDevice[]>([]);
-	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+	const [selectedDeviceId, setSelectedDeviceId] = useState<string>(initialDeviceId);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const selectedDeviceIdRef = useRef(selectedDeviceId);

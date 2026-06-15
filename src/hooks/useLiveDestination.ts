@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { loadLaunchPreferences, saveLaunchPreferencesPatch } from "@/lib/launchPreferences";
 import {
 	type LiveStreamDestinationInput,
 	type LiveStreamDestinationProvider,
@@ -10,12 +11,15 @@ export const DEFAULT_STREAM_SERVER_URL = "rtmp://a.rtmp.youtube.com/live2";
 type SetDestinationError = (error: string | null) => void;
 
 function useRtmpDestinationState(setError: SetDestinationError) {
-	const [serverUrl, setServerUrlState] = useState(DEFAULT_STREAM_SERVER_URL);
+	const [serverUrl, setServerUrlState] = useState(
+		() => loadLaunchPreferences().rtmpServerUrl ?? DEFAULT_STREAM_SERVER_URL,
+	);
 	const [streamKey, setStreamKeyState] = useState("");
 
 	const setServerUrl = useCallback(
 		(nextServerUrl: string) => {
 			setServerUrlState(nextServerUrl);
+			saveLaunchPreferencesPatch({ rtmpServerUrl: nextServerUrl });
 			setError(null);
 		},
 		[setError],
@@ -125,7 +129,9 @@ function useYouTubeDestinationState(setError: SetDestinationError) {
 }
 
 export function useLiveDestination() {
-	const [provider, setProviderState] = useState<LiveStreamDestinationProvider>("rtmp");
+	const [provider, setProviderState] = useState<LiveStreamDestinationProvider>(
+		() => loadLaunchPreferences().destinationProvider ?? "rtmp",
+	);
 	const [error, setError] = useState<string | null>(null);
 	const rtmp = useRtmpDestinationState(setError);
 	const youtube = useYouTubeDestinationState(setError);
@@ -142,6 +148,7 @@ export function useLiveDestination() {
 	const setProvider = useCallback(
 		(nextProvider: LiveStreamDestinationProvider) => {
 			setProviderState(nextProvider);
+			saveLaunchPreferencesPatch({ destinationProvider: nextProvider });
 			setError(null);
 			if (nextProvider === "youtube") {
 				void youtube.refreshAuthStatus();

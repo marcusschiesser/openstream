@@ -1,8 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+	clearLaunchPreferencesForTest,
+	LAUNCH_PREFERENCES_STORAGE_KEY,
+} from "@/lib/launchPreferences";
 import { DEFAULT_STREAM_SERVER_URL, useLiveDestination } from "./useLiveDestination";
 
 describe("useLiveDestination", () => {
+	beforeEach(() => {
+		clearLaunchPreferencesForTest();
+	});
+
 	it("defaults to the YouTube RTMP server and an empty stream key", () => {
 		const { result } = renderHook(() => useLiveDestination());
 
@@ -55,6 +63,33 @@ describe("useLiveDestination", () => {
 			result.current.finish();
 		});
 		expect(result.current.rtmp.streamKey).toBe("");
+	});
+
+	it("restores and saves provider and RTMP server without persisting stream keys", () => {
+		localStorage.setItem(
+			LAUNCH_PREFERENCES_STORAGE_KEY,
+			JSON.stringify({
+				version: 1,
+				destinationProvider: "youtube",
+				rtmpServerUrl: "rtmps://stored.example/live",
+			}),
+		);
+		const { result } = renderHook(() => useLiveDestination());
+
+		expect(result.current.provider).toBe("youtube");
+		expect(result.current.rtmp.serverUrl).toBe("rtmps://stored.example/live");
+
+		act(() => {
+			result.current.setProvider("rtmp");
+			result.current.rtmp.setServerUrl("rtmps://next.example/live");
+			result.current.rtmp.setStreamKey("secret-key");
+		});
+
+		const stored = localStorage.getItem(LAUNCH_PREFERENCES_STORAGE_KEY) ?? "";
+		expect(stored).toContain("rtmps://next.example/live");
+		expect(stored).toContain('"destinationProvider":"rtmp"');
+		expect(stored).not.toContain("secret-key");
+		expect(stored).not.toContain("streamKey");
 	});
 
 	it("validates YouTube destination from auth state", async () => {

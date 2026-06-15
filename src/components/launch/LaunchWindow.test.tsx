@@ -1,6 +1,10 @@
 import "@testing-library/jest-dom";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	clearLaunchPreferencesForTest,
+	LAUNCH_PREFERENCES_STORAGE_KEY,
+} from "@/lib/launchPreferences";
 import { TooltipProvider } from "../ui/tooltip";
 import { LaunchWindow } from "./LaunchWindow";
 
@@ -114,6 +118,7 @@ async function flushPromises(times = 3) {
 
 describe("LaunchWindow screen selection", () => {
 	beforeEach(() => {
+		clearLaunchPreferencesForTest();
 		deviceHookMocks.cameraDevices = [];
 		deviceHookMocks.selectedCameraId = "";
 		deviceHookMocks.setSelectedCameraId.mockClear();
@@ -192,7 +197,7 @@ describe("LaunchWindow screen selection", () => {
 		expect(screen.queryByTestId("launch-screen-select")).not.toBeInTheDocument();
 	});
 
-	it("requests camera access on launch to activate the webcam by default", async () => {
+	it("keeps the webcam disabled by default on launch", async () => {
 		const screenOne = makeScreen(1);
 		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
 		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
@@ -203,14 +208,120 @@ describe("LaunchWindow screen selection", () => {
 			</TooltipProvider>,
 		);
 
-		await waitFor(() => {
-			expect(window.electronAPI.requestCameraAccess).toHaveBeenCalled();
-		});
+		await screen.findByText("Screen 1");
+		expect(window.electronAPI.requestCameraAccess).not.toHaveBeenCalled();
+		expect(window.electronAPI.setWebcamPreviewState).not.toHaveBeenCalledWith(
+			expect.objectContaining({ enabled: true }),
+		);
+	});
+
+	it("restores enabled launch controls from preferences", async () => {
+		localStorage.setItem(
+			LAUNCH_PREFERENCES_STORAGE_KEY,
+			JSON.stringify({
+				version: 1,
+				systemAudioEnabled: true,
+				microphoneEnabled: true,
+				microphoneDeviceId: "mic-1",
+				webcamEnabled: true,
+				webcamDeviceId: "cam-1",
+				liveStreamLayout: {
+					webcamMaskShape: "circle",
+					webcamSizePreset: 35,
+					webcamPosition: { cx: 0.6, cy: 0.4 },
+				},
+			}),
+		);
+		deviceHookMocks.cameraDevices = [{ deviceId: "cam-1", label: "Camera One" }];
+		deviceHookMocks.selectedCameraId = "cam-1";
+		deviceHookMocks.micDevices = [{ deviceId: "mic-1", label: "Desk Mic" }];
+		deviceHookMocks.selectedMicId = "mic-1";
+		const screenOne = makeScreen(1);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		await screen.findByText("Screen 1");
+		expect(screen.getByTestId("launch-system-audio-button")).toHaveAttribute(
+			"title",
+			"audio.disableSystemAudio",
+		);
+		expect(screen.getByTestId("launch-microphone-button")).toHaveAttribute(
+			"title",
+			"audio.disableMicrophone",
+		);
+		expect(screen.getByTestId("launch-webcam-button")).toHaveAttribute(
+			"title",
+			"webcam.disableWebcam",
+		);
 		await waitFor(() => {
 			expect(window.electronAPI.setWebcamPreviewState).toHaveBeenCalledWith(
-				expect.objectContaining({ enabled: true }),
+				expect.objectContaining({
+					enabled: true,
+					webcamDeviceId: "cam-1",
+					layout: {
+						webcamMaskShape: "circle",
+						webcamSizePreset: 35,
+						webcamPosition: { cx: 0.6, cy: 0.4 },
+					},
+				}),
 			);
 		});
+	});
+
+	it("restores selected screen by exact id and syncs it to Electron", async () => {
+		const screenOne = makeScreen(1);
+		const screenTwo = makeScreen(2);
+		localStorage.setItem(
+			LAUNCH_PREFERENCES_STORAGE_KEY,
+			JSON.stringify({
+				version: 1,
+				selectedSource: { id: screenTwo.id, displayId: screenTwo.display_id },
+			}),
+		);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne, screenTwo]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+		vi.mocked(window.electronAPI.selectSource).mockResolvedValue(screenTwo);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		const select = await screen.findByTestId("launch-screen-select");
+		expect(select).toHaveValue(screenTwo.id);
+		expect(window.electronAPI.selectSource).toHaveBeenCalledWith(screenTwo);
+	});
+
+	it("restores selected screen by display id when the exact source id changed", async () => {
+		const screenOne = makeScreen(1);
+		const screenTwo = makeScreen(2);
+		localStorage.setItem(
+			LAUNCH_PREFERENCES_STORAGE_KEY,
+			JSON.stringify({
+				version: 1,
+				selectedSource: { id: "old-screen-id", displayId: screenTwo.display_id },
+			}),
+		);
+		vi.mocked(window.electronAPI.getScreenSources).mockResolvedValue([screenOne, screenTwo]);
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(screenOne);
+		vi.mocked(window.electronAPI.selectSource).mockResolvedValue(screenTwo);
+
+		render(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		const select = await screen.findByTestId("launch-screen-select");
+		expect(select).toHaveValue(screenTwo.id);
+		expect(window.electronAPI.selectSource).toHaveBeenCalledWith(screenTwo);
 	});
 
 	it("keeps the selected screen label visible during background refreshes", async () => {
@@ -544,6 +655,7 @@ describe("LaunchWindow screen selection", () => {
 		);
 
 		await screen.findByText("Screen 1");
+		fireEvent.click(screen.getByTestId("launch-webcam-button"));
 		expect(await screen.findByText("No cameras")).toBeInTheDocument();
 
 		const readOnlyDestination = screen.getByText("rtmp://a.rtmp.youtube.com/live2");
@@ -643,6 +755,7 @@ describe("LaunchWindow screen selection", () => {
 		);
 
 		await screen.findByText("Screen 1");
+		fireEvent.click(screen.getByTestId("launch-webcam-button"));
 		const readOnlyCamera = await screen.findByText("Camera One");
 		fireEvent.pointerMove(readOnlyCamera);
 
@@ -671,6 +784,7 @@ describe("LaunchWindow screen selection", () => {
 		);
 
 		await screen.findByText("Screen 1");
+		fireEvent.click(screen.getByTestId("launch-webcam-button"));
 		const readOnlyCamera = await screen.findByText("Camera One");
 		fireEvent.pointerMove(readOnlyCamera);
 
@@ -734,6 +848,8 @@ describe("LaunchWindow screen selection", () => {
 		);
 
 		await screen.findByText("Screen 1");
+		fireEvent.click(screen.getByTestId("launch-webcam-button"));
+		await screen.findByText("Camera One");
 		const readOnlyDestination = screen.getByText("rtmp://a.rtmp.youtube.com/live2");
 		fireEvent.pointerMove(readOnlyDestination);
 

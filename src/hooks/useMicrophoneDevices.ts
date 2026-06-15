@@ -6,9 +6,9 @@ export interface MicrophoneDevice {
 	groupId: string;
 }
 
-export function useMicrophoneDevices(enabled: boolean = true) {
+export function useMicrophoneDevices(enabled: boolean = true, initialDeviceId: string = "default") {
 	const [devices, setDevices] = useState<MicrophoneDevice[]>([]);
-	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("default");
+	const [selectedDeviceId, setSelectedDeviceId] = useState<string>(initialDeviceId);
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +41,11 @@ export function useMicrophoneDevices(enabled: boolean = true) {
 
 				if (mounted) {
 					setDevices(audioInputs);
-					if (selectedDeviceId === "default" && audioInputs.length > 0) {
+					const stillAvailable = audioInputs.some((device) => device.deviceId === selectedDeviceId);
+					if (
+						(!selectedDeviceId || selectedDeviceId === "default" || !stillAvailable) &&
+						audioInputs.length > 0
+					) {
 						setSelectedDeviceId(audioInputs[0].deviceId);
 					}
 					setIsLoading(false);

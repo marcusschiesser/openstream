@@ -19,6 +19,7 @@ import { useCameraDevices } from "../../hooks/useCameraDevices";
 import { useLiveDestination } from "../../hooks/useLiveDestination";
 import { useLiveStreamer } from "../../hooks/useLiveStreamer";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
+import { loadLaunchPreferences, saveLaunchPreferencesPatch } from "../../lib/launchPreferences";
 import type { WebcamMaskShape } from "../../lib/liveLayoutTypes";
 import {
 	DEFAULT_LIVE_STREAM_LAYOUT,
@@ -72,12 +73,24 @@ export function LaunchWindow() {
 	} = useI18n();
 	const suggestedLanguageName = systemLocaleSuggestion ? getLocaleName(systemLocaleSuggestion) : "";
 	const activeLanguageLabel = getLocaleName(locale).split(/\s+/)[0] || locale.toUpperCase();
+	const initialLaunchPreferencesRef = useRef(loadLaunchPreferences());
+	const initialLaunchPreferences = initialLaunchPreferencesRef.current;
 
-	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
-	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
-	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
-	const [webcamEnabled, setWebcamEnabledState] = useState(false);
-	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
+	const [systemAudioEnabled, setSystemAudioEnabled] = useState(
+		initialLaunchPreferences.systemAudioEnabled ?? false,
+	);
+	const [microphoneEnabled, setMicrophoneEnabled] = useState(
+		initialLaunchPreferences.microphoneEnabled ?? false,
+	);
+	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(
+		initialLaunchPreferences.microphoneDeviceId ?? undefined,
+	);
+	const [webcamEnabled, setWebcamEnabledState] = useState(
+		initialLaunchPreferences.webcamEnabled ?? false,
+	);
+	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(
+		initialLaunchPreferences.webcamDeviceId ?? undefined,
+	);
 	const destination = useLiveDestination();
 	const {
 		streaming,
@@ -120,7 +133,6 @@ export function LaunchWindow() {
 	const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageMenuPanelRef = useRef<HTMLDivElement | null>(null);
-	const autoEnabledWebcamRef = useRef(false);
 	const wasStreamingRef = useRef(false);
 	const [languageMenuStyle, setLanguageMenuStyle] = useState({
 		right: 12,
@@ -132,14 +144,14 @@ export function LaunchWindow() {
 		devices: micDevices,
 		selectedDeviceId: selectedMicId,
 		setSelectedDeviceId: setSelectedMicId,
-	} = useMicrophoneDevices(microphoneEnabled);
+	} = useMicrophoneDevices(microphoneEnabled, microphoneDeviceId ?? "default");
 	const {
 		devices: cameraDevices,
 		selectedDeviceId: selectedCameraId,
 		setSelectedDeviceId: setSelectedCameraId,
 		isLoading: isCameraDevicesLoading,
 		error: cameraDevicesError,
-	} = useCameraDevices(webcamEnabled);
+	} = useCameraDevices(webcamEnabled, webcamDeviceId ?? "");
 
 	const selectedMicLabel =
 		micDevices.find((d) => d.deviceId === (microphoneDeviceId || selectedMicId))?.label ||
@@ -170,6 +182,26 @@ export function LaunchWindow() {
 			setWebcamDeviceId(selectedCameraId);
 		}
 	}, [selectedCameraId]);
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ systemAudioEnabled });
+	}, [systemAudioEnabled]);
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ microphoneEnabled });
+	}, [microphoneEnabled]);
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ microphoneDeviceId: microphoneDeviceId ?? null });
+	}, [microphoneDeviceId]);
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ webcamEnabled });
+	}, [webcamEnabled]);
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ webcamDeviceId: webcamDeviceId ?? null });
+	}, [webcamDeviceId]);
 
 	useEffect(() => {
 		if (!isLanguageMenuOpen) return;
@@ -234,12 +266,16 @@ export function LaunchWindow() {
 	const [liveSetupPreparing, setLiveSetupPreparing] = useState(false);
 	const liveStreamStarting = liveSetupPreparing && !streaming;
 	const [liveStreamLayout, setLiveStreamLayout] = useState<LiveStreamLayout>(
-		DEFAULT_LIVE_STREAM_LAYOUT,
+		initialLaunchPreferences.liveStreamLayout ?? DEFAULT_LIVE_STREAM_LAYOUT,
 	);
 	const [previewHiddenForStreaming, setPreviewHiddenForStreaming] = useState(false);
 	const selectedSourceLabel = selectedSource?.name ?? "No screen";
 	const webcamPreviewVisible =
 		webcamEnabled && Boolean(selectedSource) && !streaming && !previewHiddenForStreaming;
+
+	useEffect(() => {
+		saveLaunchPreferencesPatch({ liveStreamLayout });
+	}, [liveStreamLayout]);
 
 	useEffect(() => {
 		setHudMouseEventsEnabled(isLanguageMenuOpen);
@@ -315,8 +351,17 @@ export function LaunchWindow() {
 
 			const sources = await window.electronAPI.getScreenSources();
 			const selected = await window.electronAPI.getSelectedSource();
+			const savedSource = loadLaunchPreferences().selectedSource;
+			const restoredSource = savedSource
+				? (sources.find((source) => source.id === savedSource.id) ??
+					sources.find((source) => source.display_id === savedSource.displayId))
+				: null;
+			const nextSelected = restoredSource ?? selected ?? sources[0] ?? null;
+			if (restoredSource && restoredSource.id !== selected?.id) {
+				await window.electronAPI.selectSource(restoredSource);
+			}
 			setScreenSources(sources);
-			setSelectedSource(selected ?? sources[0] ?? null);
+			setSelectedSource(nextSelected);
 		} catch (error) {
 			console.warn("Unable to load screen sources:", error);
 			setScreenSources([]);
@@ -353,10 +398,14 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
-		if (autoEnabledWebcamRef.current) return;
-		autoEnabledWebcamRef.current = true;
-		void setWebcamEnabled(true);
-	}, [setWebcamEnabled]);
+		if (!selectedSource) return;
+		saveLaunchPreferencesPatch({
+			selectedSource: {
+				id: selectedSource.id,
+				displayId: selectedSource.display_id,
+			},
+		});
+	}, [selectedSource]);
 
 	const updateLiveStreamLayout = (next: Partial<LiveStreamLayout>) => {
 		setLiveStreamLayout((current) => ({ ...current, ...next }));
