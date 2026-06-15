@@ -27,19 +27,19 @@ YouTube Live creation uses the YouTube Data API and Google OAuth for desktop app
 requires a Google OAuth desktop client ID and client secret at build time. Users still sign in with
 their own Google account.
 
-For local development, set the values in your shell before starting the app:
+For local development, put the values in a local `.env` file. This file is ignored by git:
 
 ```sh
-export YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
-export YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
+cp .env.example .env
+# edit .env and set:
+# YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
+# YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
 npm run dev
 ```
 
-Local production builds require the same variables:
+Local production builds use the same `.env` file:
 
 ```sh
-export YOUTUBE_CLIENT_ID="your-google-oauth-client-id"
-export YOUTUBE_CLIENT_SECRET="your-google-oauth-client-secret"
 npm run build
 ```
 

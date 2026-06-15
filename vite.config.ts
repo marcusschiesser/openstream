@@ -1,10 +1,10 @@
 import path from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type UserConfig } from "vite";
+import { defineConfig, loadEnv, type UserConfig } from "vite";
 import electron from "vite-plugin-electron/simple";
 
-function readRequiredBuildEnv(name: string, command: string) {
-	const value = process.env[name];
+function readRequiredBuildEnv(name: string, command: string, env: Record<string, string>) {
+	const value = env[name];
 	if (command === "build" && !value) {
 		throw new Error(`Missing required build environment variable: ${name}`);
 	}
@@ -12,9 +12,10 @@ function readRequiredBuildEnv(name: string, command: string) {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => {
-	const youtubeClientId = readRequiredBuildEnv("YOUTUBE_CLIENT_ID", command);
-	const youtubeClientSecret = readRequiredBuildEnv("YOUTUBE_CLIENT_SECRET", command);
+export default defineConfig(({ command, mode }) => {
+	const appEnv = { ...loadEnv(mode, process.cwd(), ""), ...process.env };
+	const youtubeClientId = readRequiredBuildEnv("YOUTUBE_CLIENT_ID", command, appEnv);
+	const youtubeClientSecret = readRequiredBuildEnv("YOUTUBE_CLIENT_SECRET", command, appEnv);
 	const electronMainConfig: UserConfig = {
 		define: {
 			__OPENSTREAM_YOUTUBE_CLIENT_ID__: youtubeClientId
@@ -34,9 +35,9 @@ export default defineConfig(({ command }) => {
 				main: {
 					entry: "electron/main.ts",
 					onstart({ startup }) {
-						const env = { ...process.env };
-						delete env.ELECTRON_RUN_AS_NODE;
-						return startup(["."], { env });
+						const startupEnv = { ...appEnv };
+						delete startupEnv.ELECTRON_RUN_AS_NODE;
+						return startup(["."], { env: startupEnv });
 					},
 					vite: electronMainConfig,
 				},
