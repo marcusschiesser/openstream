@@ -116,6 +116,14 @@ async function flushPromises(times = 3) {
 	}
 }
 
+function selectYouTubeDestination() {
+	const providerSelect = screen.getByLabelText("Destination provider");
+	expect(providerSelect).toBeInTheDocument();
+	fireEvent.change(providerSelect, { target: { value: "youtube" } });
+	const collapsedYouTubeDestination = screen.getByText("YouTube Live");
+	fireEvent.pointerMove(collapsedYouTubeDestination, { movementX: 1, movementY: 0 });
+}
+
 describe("LaunchWindow screen selection", () => {
 	beforeEach(() => {
 		clearLaunchPreferencesForTest();
@@ -491,7 +499,7 @@ describe("LaunchWindow screen selection", () => {
 		await screen.findByText("Screen 1");
 		const readOnlyDestination = screen.getByText("rtmp://a.rtmp.youtube.com/live2");
 		fireEvent.pointerMove(readOnlyDestination);
-		fireEvent.click(screen.getByText("YouTube Live"));
+		selectYouTubeDestination();
 		expect(await screen.findByText("Sign in with Google")).toBeInTheDocument();
 
 		fireEvent.click(screen.getByText("Sign in with Google"));
@@ -515,7 +523,7 @@ describe("LaunchWindow screen selection", () => {
 
 		await screen.findByText("Screen 1");
 		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
-		fireEvent.click(screen.getByText("YouTube Live"));
+		selectYouTubeDestination();
 		fireEvent.click(await screen.findByText("Sign in with Google"));
 		await screen.findByText("Signed in with Google");
 
@@ -581,7 +589,7 @@ describe("LaunchWindow screen selection", () => {
 
 		await screen.findByText("Screen 1");
 		fireEvent.pointerMove(screen.getByText("rtmp://a.rtmp.youtube.com/live2"));
-		fireEvent.click(screen.getByText("YouTube Live"));
+		selectYouTubeDestination();
 		fireEvent.click(await screen.findByText("Sign in with Google"));
 		await screen.findByText("Signed in with Google");
 

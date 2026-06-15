@@ -5,6 +5,7 @@ import type { LiveStreamDestinationProvider } from "@/lib/liveStream";
 import { useHudPillExpansion } from "../../hooks/useHudPillExpansion";
 import { Input } from "../ui/input";
 import { HudControlPill } from "./HudControlPill";
+import { HudSelect } from "./HudSelect";
 
 type RtmpDestinationState = {
 	serverUrl: string;
@@ -195,42 +196,37 @@ export function DestinationPill({
 				</div>
 			) : (
 				<div className="flex min-w-0 flex-1 flex-col gap-1.5">
-					<div className="flex min-w-0 items-center gap-1 rounded-md bg-white/[0.04] p-0.5">
-						{(["rtmp", "youtube"] as const).map((provider) => (
-							<button
-								key={provider}
-								type="button"
-								aria-pressed={destination.provider === provider}
-								disabled={readOnly}
-								onClick={() => {
-									if (!readOnly) destination.setProvider(provider);
-								}}
-								className={`flex h-6 min-w-0 flex-1 items-center justify-center gap-1 rounded px-2 text-[10px] font-medium transition ${
-									destination.provider === provider
-										? "bg-white/15 text-white"
-										: "text-white/55 hover:bg-white/10 hover:text-white/80"
-								} disabled:cursor-not-allowed disabled:opacity-60`}
-							>
-								{provider === "youtube" ? <Youtube size={12} /> : <RadioTower size={12} />}
-								<span>{provider === "youtube" ? "YouTube Live" : "RTMP"}</span>
-							</button>
-						))}
+					<div className="flex min-w-0 items-center gap-2">
+						<HudSelect
+							controller={expansion}
+							disabled={readOnly}
+							label="Destination provider"
+							value={destination.provider}
+							width={128}
+							options={[
+								{ label: "RTMP", value: "rtmp", icon: <RadioTower size={12} /> },
+								{ label: "YouTube Live", value: "youtube", icon: <Youtube size={12} /> },
+							]}
+							onValueChange={(provider) =>
+								destination.setProvider(provider as LiveStreamDestinationProvider)
+							}
+						/>
+						{destination.provider === "rtmp" ? (
+							<RtmpDestinationControls
+								rtmp={destination.rtmp}
+								readOnly={readOnly}
+								onCollapseToReadOnly={collapseToReadOnly}
+							/>
+						) : (
+							<YouTubeDestinationControls
+								youtube={destination.youtube}
+								readOnly={readOnly}
+								copied={copied}
+								onCopyUrl={() => void copyYouTubeUrl()}
+								isStreaming={isStreaming}
+							/>
+						)}
 					</div>
-					{destination.provider === "rtmp" ? (
-						<RtmpDestinationControls
-							rtmp={destination.rtmp}
-							readOnly={readOnly}
-							onCollapseToReadOnly={collapseToReadOnly}
-						/>
-					) : (
-						<YouTubeDestinationControls
-							youtube={destination.youtube}
-							readOnly={readOnly}
-							copied={copied}
-							onCopyUrl={() => void copyYouTubeUrl()}
-							isStreaming={isStreaming}
-						/>
-					)}
 					{destination.error && (
 						<div className="truncate text-[10px] text-red-200">{destination.error}</div>
 					)}
