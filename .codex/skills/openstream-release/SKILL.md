@@ -18,6 +18,7 @@ Use this skill only from the OpenStream repository root.
    - Run `python3 .codex/skills/openstream-release/scripts/propose_release.py`.
    - The script reads `package.json`, git tags, and commits since the latest `v*` tag.
    - It suggests a semantic version bump and release-note bullets.
+   - Keep `Changes:` focused on user-facing app behavior; omit docs, CI, workflow, skill, and release-process-only changes.
 
 3. Present the proposal for review:
    - Show the suggested version.

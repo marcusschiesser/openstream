@@ -38,7 +38,7 @@ def latest_release_tag(cwd: Path) -> str | None:
 
 def release_base(cwd: Path, current_version: str) -> tuple[str | None, str]:
     latest_tag = latest_release_tag(cwd)
-    if latest_tag:
+    if latest_tag and parse_version(latest_tag) == parse_version(current_version):
         return latest_tag, latest_tag
 
     output = run_git(["log", "--format=%H%x00%s"], cwd)
@@ -50,6 +50,9 @@ def release_base(cwd: Path, current_version: str) -> tuple[str | None, str]:
         commit, _, subject = line.partition("\x00")
         if any(pattern.search(subject) for pattern in version_patterns):
             return commit, f"{commit[:7]} ({subject})"
+
+    if latest_tag:
+        return latest_tag, latest_tag
 
     return None, "(none)"
 
@@ -90,6 +93,30 @@ def clean_subject(subject: str) -> str:
     return subject[0].upper() + subject[1:]
 
 
+def is_user_facing_subject(subject: str) -> bool:
+    lowered = subject.lower()
+    internal_prefixes = (
+        "ci:",
+        "docs:",
+        "chore:",
+        "test:",
+    )
+    internal_keywords = (
+        "readme",
+        "workflow",
+        "release notes",
+        "release skill",
+        "build workflow",
+        "ci ",
+        "build env",
+        ".env",
+    )
+    return not (
+        lowered.startswith(internal_prefixes)
+        or any(keyword in lowered for keyword in internal_keywords)
+    )
+
+
 def release_bullets(subjects: list[str]) -> list[str]:
     lowered_subjects = [subject.lower() for subject in subjects]
     bullets: list[str] = []
@@ -111,12 +138,11 @@ def release_bullets(subjects: list[str]) -> list[str]:
         )
     if has_any("hud", "destination provider", "mic", "webcam", "focus ring", "tray"):
         bullets.append("- Refined HUD controls for destination, microphone, webcam, tray restore, and focus behavior.")
-    if has_any("readme", ".env", "build env"):
-        bullets.append("- Updated local build configuration and documentation for environment-based settings.")
-
     seen = {bullet.lower() for bullet in bullets}
     for subject in reversed(subjects):
         if subject.lower().startswith("chore: release "):
+            continue
+        if not is_user_facing_subject(subject):
             continue
         cleaned = clean_subject(subject)
         if not cleaned:
