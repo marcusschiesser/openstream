@@ -271,6 +271,7 @@ export function LaunchWindow() {
 		initialLaunchPreferences.liveStreamLayout ?? DEFAULT_LIVE_STREAM_LAYOUT,
 	);
 	const [previewHiddenForStreaming, setPreviewHiddenForStreaming] = useState(false);
+	const screenAccessPromptStartedRef = useRef(false);
 	const selectedSourceLabel = selectedSource?.name ?? "No screen";
 	const webcamPreviewVisible =
 		webcamEnabled && Boolean(selectedSource) && !streaming && !previewHiddenForStreaming;
@@ -345,42 +346,65 @@ export function LaunchWindow() {
 		});
 	}, []);
 
-	const loadScreenSources = useCallback(async (options: { showLoading?: boolean } = {}) => {
-		const showLoading = options.showLoading ?? true;
-		if (showLoading) {
-			setScreenSourcesLoading(true);
-		}
+	const requestScreenCaptureRegistration = useCallback(async () => {
 		try {
-			const access = await window.electronAPI.requestScreenAccess();
-			if (!access.granted) {
-				setScreenSources([]);
-				setSelectedSource(null);
-				return;
+			// desktopCapturer alone does not reliably create the macOS TCC entry.
+			// getDisplayMedia triggers the native Screen Recording permission prompt.
+			const stream = await navigator.mediaDevices.getDisplayMedia({
+				video: true,
+				audio: false,
+			});
+			for (const track of stream.getTracks()) {
+				track.stop();
 			}
-
-			const sources = await window.electronAPI.getScreenSources();
-			const selected = await window.electronAPI.getSelectedSource();
-			const savedSource = loadLaunchPreferences().selectedSource;
-			const restoredSource = savedSource
-				? (sources.find((source) => source.id === savedSource.id) ??
-					sources.find((source) => source.display_id === savedSource.displayId))
-				: null;
-			const nextSelected = restoredSource ?? selected ?? sources[0] ?? null;
-			if (restoredSource && restoredSource.id !== selected?.id) {
-				await window.electronAPI.selectSource(restoredSource);
-			}
-			setScreenSources(sources);
-			setSelectedSource(nextSelected);
-		} catch (error) {
-			console.warn("Unable to load screen sources:", error);
-			setScreenSources([]);
-			setSelectedSource(null);
-		} finally {
-			if (showLoading) {
-				setScreenSourcesLoading(false);
-			}
+		} catch {
+			// macOS still registers the app for Screen Recording when the request is denied.
 		}
 	}, []);
+
+	const loadScreenSources = useCallback(
+		async (options: { showLoading?: boolean } = {}) => {
+			const showLoading = options.showLoading ?? true;
+			if (showLoading) {
+				setScreenSourcesLoading(true);
+			}
+			try {
+				const access = await window.electronAPI.requestScreenAccess();
+				if (!access.granted) {
+					setScreenSources([]);
+					setSelectedSource(null);
+					if (!screenAccessPromptStartedRef.current) {
+						screenAccessPromptStartedRef.current = true;
+						await requestScreenCaptureRegistration();
+					}
+					return;
+				}
+
+				const sources = await window.electronAPI.getScreenSources();
+				const selected = await window.electronAPI.getSelectedSource();
+				const savedSource = loadLaunchPreferences().selectedSource;
+				const restoredSource = savedSource
+					? (sources.find((source) => source.id === savedSource.id) ??
+						sources.find((source) => source.display_id === savedSource.displayId))
+					: null;
+				const nextSelected = restoredSource ?? selected ?? sources[0] ?? null;
+				if (restoredSource && restoredSource.id !== selected?.id) {
+					await window.electronAPI.selectSource(restoredSource);
+				}
+				setScreenSources(sources);
+				setSelectedSource(nextSelected);
+			} catch (error) {
+				console.warn("Unable to load screen sources:", error);
+				setScreenSources([]);
+				setSelectedSource(null);
+			} finally {
+				if (showLoading) {
+					setScreenSourcesLoading(false);
+				}
+			}
+		},
+		[requestScreenCaptureRegistration],
+	);
 
 	useEffect(() => {
 		void loadScreenSources({ showLoading: true });

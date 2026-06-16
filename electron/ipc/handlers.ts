@@ -198,9 +198,6 @@ export function registerIpcHandlers(getMainWindow: () => Electron.BrowserWindow 
 					mainWin.focus();
 					app.focus({ steal: true });
 				}
-				desktopCapturer
-					.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } })
-					.catch(() => undefined);
 				return { success: true, granted: false, status: "not-determined" };
 			}
 

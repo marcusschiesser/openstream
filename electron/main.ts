@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import {
 	app,
 	BrowserWindow,
+	desktopCapturer,
 	ipcMain,
 	Menu,
 	nativeImage,
@@ -197,15 +198,27 @@ app.whenReady().then(async () => {
 
 	session.defaultSession.setDisplayMediaRequestHandler(
 		(request, callback) => {
-			const source = getSelectedDesktopSource();
-			if (!request.videoRequested || !source) {
-				callback({});
-				return;
-			}
-			callback({
-				video: source,
-				...(request.audioRequested && process.platform === "win32" ? { audio: "loopback" } : {}),
-			});
+			void (async () => {
+				const source =
+					getSelectedDesktopSource() ??
+					// Startup permission probing can call getDisplayMedia before a screen is selected.
+					// Providing the first screen lets Chromium/macOS register OpenStream with TCC.
+					(
+						await desktopCapturer.getSources({
+							types: ["screen"],
+							thumbnailSize: { width: 1, height: 1 },
+							fetchWindowIcons: false,
+						})
+					)[0];
+				if (!request.videoRequested || !source) {
+					callback({});
+					return;
+				}
+				callback({
+					video: source,
+					...(request.audioRequested && process.platform === "win32" ? { audio: "loopback" } : {}),
+				});
+			})().catch(() => callback({}));
 		},
 		{ useSystemPicker: false },
 	);
