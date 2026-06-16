@@ -12,8 +12,8 @@ const YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3";
 const TOKEN_FILE_NAME = "youtube-auth-token.json";
 const OAUTH_TIMEOUT_MS = 120_000;
 
-declare const __OPENSTREAM_YOUTUBE_CLIENT_ID__: string | undefined;
-declare const __OPENSTREAM_YOUTUBE_CLIENT_SECRET__: string | undefined;
+declare const __YOUTUBE_CLIENT_ID__: string | undefined;
+declare const __YOUTUBE_CLIENT_SECRET__: string | undefined;
 
 type StoredYouTubeToken = {
 	accessToken?: string;
@@ -68,27 +68,23 @@ export type YouTubeBroadcastStatusResult = {
 	lifeCycleStatus: string | null;
 };
 
+function normalizeConfigValue(value: string | undefined): string | null {
+	const trimmedValue = value?.trim();
+	return trimmedValue ? trimmedValue : null;
+}
+
 function getOAuthClientId(): string | null {
-	return (
-		process.env.OPENSTREAM_YOUTUBE_CLIENT_ID ??
-		process.env.VITE_OPENSTREAM_YOUTUBE_CLIENT_ID ??
+	return normalizeConfigValue(
 		process.env.YOUTUBE_CLIENT_ID ??
-		(typeof __OPENSTREAM_YOUTUBE_CLIENT_ID__ === "undefined"
-			? undefined
-			: __OPENSTREAM_YOUTUBE_CLIENT_ID__) ??
-		null
+			(typeof __YOUTUBE_CLIENT_ID__ === "undefined" ? undefined : __YOUTUBE_CLIENT_ID__),
 	);
 }
 
 function getOAuthClientSecret(): string | null {
-	const configuredSecret =
-		process.env.OPENSTREAM_YOUTUBE_CLIENT_SECRET ??
-		process.env.VITE_OPENSTREAM_YOUTUBE_CLIENT_SECRET ??
+	return normalizeConfigValue(
 		process.env.YOUTUBE_CLIENT_SECRET ??
-		(typeof __OPENSTREAM_YOUTUBE_CLIENT_SECRET__ === "undefined"
-			? undefined
-			: __OPENSTREAM_YOUTUBE_CLIENT_SECRET__);
-	return configuredSecret || null;
+			(typeof __YOUTUBE_CLIENT_SECRET__ === "undefined" ? undefined : __YOUTUBE_CLIENT_SECRET__),
+	);
 }
 
 function appendOAuthClientSecret(params: URLSearchParams) {

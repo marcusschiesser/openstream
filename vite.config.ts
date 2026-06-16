@@ -18,10 +18,8 @@ export default defineConfig(({ command, mode }) => {
 	const youtubeClientSecret = readRequiredBuildEnv("YOUTUBE_CLIENT_SECRET", command, appEnv);
 	const electronMainConfig: UserConfig = {
 		define: {
-			__OPENSTREAM_YOUTUBE_CLIENT_ID__: youtubeClientId
-				? JSON.stringify(youtubeClientId)
-				: "undefined",
-			__OPENSTREAM_YOUTUBE_CLIENT_SECRET__: youtubeClientSecret
+			__YOUTUBE_CLIENT_ID__: youtubeClientId ? JSON.stringify(youtubeClientId) : "undefined",
+			__YOUTUBE_CLIENT_SECRET__: youtubeClientSecret
 				? JSON.stringify(youtubeClientSecret)
 				: "undefined",
 		},

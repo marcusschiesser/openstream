@@ -37,7 +37,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Local production builds use the same `.env` file:
+Local production builds use the same `.env` file and embed the values into the Electron main bundle:
 
 ```sh
 npm run build

@@ -54,7 +54,7 @@ function useRtmpDestinationState(setError: SetDestinationError) {
 }
 
 function useYouTubeDestinationState(setError: SetDestinationError) {
-	const [youtubeConfigured, setYoutubeConfigured] = useState(false);
+	const [youtubeConfigured, setYoutubeConfigured] = useState(true);
 	const [youtubeAuthenticated, setYoutubeAuthenticated] = useState(false);
 	const [youtubeAuthLoading, setYoutubeAuthLoading] = useState(false);
 	const [youtubeCreatingStream, setYoutubeCreatingStream] = useState(false);
