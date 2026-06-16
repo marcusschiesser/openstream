@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenStream Release"
+  short_description: "Prepare and trigger OpenStream releases"
+  default_prompt: "Use $openstream-release to prepare an OpenStream GitHub release."
