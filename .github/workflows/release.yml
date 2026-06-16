@@ -7,6 +7,10 @@ on:
         description: "Release version to publish (for example: 1.1.0 or v1.1.0)"
         required: true
         type: string
+      changes:
+        description: "Release notes changes to include under the Changes section"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -350,12 +354,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
           TARGET: ${{ needs.prepare.outputs.sha }}
+          CHANGES: ${{ inputs.changes }}
         run: |
           set -euo pipefail
           cat > release-notes.md <<EOF
-          Release ${TAG}.
+          Release ${TAG}
 
-          Note: macOS DMGs contain an ad-hoc signed app and are not notarized.
+          Changes:
+          ${CHANGES}
+
+          Note: macOS DMGs are currently ad-hoc signed and not notarized.
           EOF
 
           gh release create "$TAG" upload-assets/* \
