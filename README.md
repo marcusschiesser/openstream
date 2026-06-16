@@ -1,18 +1,51 @@
 # OpenStream
 
-OpenStream is a lightweight desktop livestreaming app for sending a selected screen or window to an RTMP/RTMPS destination like Youtube Live.
+OpenStream is a lightweight desktop app for creating livestreams with one click. Streams can include
+a selected screen or window, webcam video, microphone audio, and system audio. Supported
+destinations are YouTube Live and custom RTMP/RTMPS endpoints.
 
 <img src="public/demo.gif" alt="OpenStream demo" width="100%">
 
 ## Features
 
 - Pick a screen or window as the live source.
-- Stream to RTMP/RTMPS endpoints with a stream key.
-- Create and stream to unlisted YouTube Live broadcasts after Google sign-in.
+- Stream to YouTube Live after Google sign-in.
+- Stream to custom RTMP/RTMPS destinations with a server URL and stream key.
+- Show and copy the YouTube watch URL as soon as the broadcast is created.
 - Include system audio, microphone audio, and webcam video.
 - Choose 16:9, 9:16, or 1:1 output presets.
-- Arrange webcam layouts before going live.
+- Position and size the webcam overlay before going live.
+- Persist non-secret launch settings across restarts.
 - Runs as a compact floating Electron HUD.
+
+## Installation
+
+Download the latest build for your platform from the
+[GitHub Releases page](https://github.com/marcusschiesser/openstream/releases).
+
+### macOS
+
+Download the macOS DMG for your CPU architecture:
+
+- Apple Silicon Macs: `Openscreen-Mac-arm64-*.dmg`
+- Intel Macs: `Openscreen-Mac-x64-*.dmg`
+
+Open the DMG and drag `OpenStream.app` into `/Applications`.
+
+Current macOS release builds are ad-hoc signed and not notarized. After downloading from GitHub,
+macOS Gatekeeper can show a message that the app is damaged or corrupt. Remove the download
+quarantine attribute once after installing:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/OpenStream.app
+```
+
+Then open OpenStream from `/Applications`.
+
+### Windows and Linux
+
+Download the Windows installer or Linux package from the GitHub release assets and install it with
+the normal platform flow.
 
 ## Development
 
@@ -42,18 +75,6 @@ Local production builds use the same `.env` file and embed the values into the E
 ```sh
 npm run build
 ```
-
-For GitHub Actions, store both values as repository secrets in
-`Settings -> Secrets and variables -> Actions -> Repository secrets`:
-
-- `YOUTUBE_CLIENT_ID`
-- `YOUTUBE_CLIENT_SECRET`
-
-The CI and release workflows pass these secrets to the build steps.
-
-## Installation
-
-Download the latest installer for your platform from the [GitHub Releases page](https://github.com/marcusschiesser/openstream/releases).
 
 ## Contributing
 
