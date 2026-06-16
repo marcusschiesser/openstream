@@ -226,7 +226,7 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
 
       - name: Package .app bundle
-        run: npx electron-builder --mac --${{ matrix.arch }} --dir
+        run: npx electron-builder --mac --${{ matrix.arch }} --dir -c.mac.identity=-
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -247,6 +247,15 @@ jobs:
           fi
           echo "app_bundle=${APP_BUNDLE}" >> "$GITHUB_OUTPUT"
           echo "Found: ${APP_BUNDLE}"
+
+      - name: Verify ad-hoc app signature
+        env:
+          APP_BUNDLE: ${{ steps.find_app.outputs.app_bundle }}
+        run: |
+          set -euo pipefail
+          codesign -dv --verbose=4 "$APP_BUNDLE" 2>&1 | tee codesign.txt
+          grep -q "Signature=adhoc" codesign.txt
+          grep -q "Identifier=de.marcusschiesser.openstream" codesign.txt
 
       - name: Create DMG
         id: dmg
@@ -278,7 +287,7 @@ jobs:
           echo "dmg_path=${DMG_OUTPUT}" >> "$GITHUB_OUTPUT"
           echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload unsigned DMG
+      - name: Upload ad-hoc signed DMG
         uses: actions/upload-artifact@v4
         with:
           name: openscreen-mac-${{ matrix.arch }}
@@ -346,7 +355,7 @@ jobs:
           cat > release-notes.md <<EOF
           Release ${TAG}.
 
-          Note: macOS DMGs are currently unsigned and not notarized.
+          Note: macOS DMGs contain an ad-hoc signed app and are not notarized.
           EOF
 
           gh release create "$TAG" upload-assets/* \
