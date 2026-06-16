@@ -4,6 +4,13 @@
 	"version": "1.1.0",
 	"type": "module",
 	"packageManager": "npm@10.9.4",
+	"overrides": {
+		"@electron/asar": "^4.2.0",
+		"@electron/get": "^5.0.0",
+		"temp": {
+			"rimraf": "^6.1.2"
+		}
+	},
 	"engines": {
 		"node": "22.22.1",
 		"npm": "10.9.4"
@@ -58,8 +65,8 @@
 		"@types/react": "^18.3.28",
 		"@types/react-dom": "^18.3.7",
 		"@vitejs/plugin-react": "^5.2.0",
-		"@vitest/browser": "^4.1.4",
-		"@vitest/browser-playwright": "^4.1.4",
+		"@vitest/browser": "^4.1.9",
+		"@vitest/browser-playwright": "^4.1.9",
 		"autoprefixer": "^10.5.0",
 		"electron": "^41.2.1",
 		"electron-builder": "^26.8.1",
@@ -75,7 +82,7 @@
 		"vite": "^7.3.2",
 		"vite-plugin-electron": "^0.29.1",
 		"vite-plugin-electron-renderer": "^0.14.6",
-		"vitest": "^4.1.4"
+		"vitest": "^4.1.9"
 	},
 	"main": "dist-electron/main.js",
 	"lint-staged": {
